@@ -1,0 +1,14 @@
+# Static export deploy: next.config.ts sets output: "export", so
+# `next build` alone produces a plain static site in out/ — no
+# server-side rendering, no Netlify Function, no Next.js runtime plugin
+# needed. This matches the project's "no backend/server" design: all
+# data access is the Firebase client SDK talking directly to Realtime
+# Database/Auth from the browser (see lib/firebase.ts).
+[build]
+  command = "npm run build"
+  publish = "out"
+
+# NEXT_PUBLIC_FIREBASE_* variables must be set in Netlify's site
+# environment variables (Site configuration → Environment variables) —
+# Next.js inlines them into the client bundle at build time, so they
+# need to be present for the build, not just at runtime.

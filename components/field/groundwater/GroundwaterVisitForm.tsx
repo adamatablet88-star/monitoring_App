@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { GroundwaterVisit, GroundwaterWell, StabilizationReading } from "@/lib/types";
-import { newId, useCollection } from "@/lib/rtdb-collection";
+import { ConflictError, saveWithConflictCheck } from "@/lib/rtdb-collection";
 import { useAuth } from "@/lib/auth-context";
 import { isStabilized } from "./stabilization";
 import { COMMON_LAB_TESTS, containerFor } from "./labTests";
@@ -23,7 +23,9 @@ interface GroundwaterVisitFormProps {
 
 export function GroundwaterVisitForm({ well, existingVisit, onDone }: GroundwaterVisitFormProps) {
   const { firebaseUser } = useAuth();
-  const { save } = useCollection<GroundwaterVisit>("groundwaterVisits");
+  // Frozen at mount — what this form actually loaded, for conflict detection on save.
+  const [baseUpdatedAt] = useState<number | null>(existingVisit?.updatedAt ?? null);
+  const [conflictError, setConflictError] = useState<string | null>(null);
 
   const [capIntegrity, setCapIntegrity] = useState<"ok" | "not_ok">(existingVisit?.condition.capIntegrity ?? "ok");
   const [casingIntegrity, setCasingIntegrity] = useState<"ok" | "not_ok">(
@@ -83,13 +85,17 @@ export function GroundwaterVisitForm({ well, existingVisit, onDone }: Groundwate
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!firebaseUser) return;
+    setConflictError(null);
 
+    const visitDate = existingVisit?.visitDate ?? todayString();
     const payload: GroundwaterVisit = {
-      id: existingVisit?.id ?? newId(),
+      // Deterministic, not random — see FuelLensVisitForm's id comment.
+      id: existingVisit?.id ?? `${well.id}_${visitDate}`,
       wellId: well.id,
-      visitDate: existingVisit?.visitDate ?? todayString(),
+      visitDate,
       createdBy: existingVisit?.createdBy ?? firebaseUser.uid,
       createdAt: existingVisit?.createdAt ?? Date.now(),
+      updatedAt: Date.now(),
       condition: { capIntegrity, casingIntegrity },
       waterDepth: waterDepthNum ?? 0,
       productLens: productLensPresent ? { present: true, thickness: Number(productLensThickness) || 0 } : undefined,
@@ -99,8 +105,16 @@ export function GroundwaterVisitForm({ well, existingVisit, onDone }: Groundwate
       labTests: selectedLabTests,
     };
 
-    await save(payload);
-    onDone();
+    try {
+      await saveWithConflictCheck("groundwaterVisits", payload, baseUpdatedAt);
+      onDone();
+    } catch (err) {
+      if (err instanceof ConflictError) {
+        setConflictError(err.message);
+        return;
+      }
+      throw err;
+    }
   }
 
   return (
@@ -273,6 +287,7 @@ export function GroundwaterVisitForm({ well, existingVisit, onDone }: Groundwate
           )}
         </fieldset>
 
+        {conflictError && <p className="field-error">{conflictError}</p>}
         <div>
           <button type="submit">שמור ביקור</button>
           <button type="button" onClick={onDone}>

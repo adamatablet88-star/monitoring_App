@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import type { BioVentingSystemVisit, ParameterReading, TreatmentSystem, TreatmentWell } from "@/lib/types";
-import { newId, useCollection } from "@/lib/rtdb-collection";
+import { ConflictError, saveWithConflictCheck, useCollection } from "@/lib/rtdb-collection";
 import { useAuth } from "@/lib/auth-context";
 import { ExtraParametersFields } from "../ExtraParametersFields";
+import { computeFieldHistory } from "../fieldHistory";
+import { FieldHistoryHint } from "../FieldHistoryHint";
 import { MonitoringPointFields, type MonitoringPointDraft } from "./MonitoringPointFields";
 
 function todayString(): string {
@@ -18,7 +20,7 @@ interface BioVentingVisitFormProps {
 
 export function BioVentingVisitForm({ system, onDone }: BioVentingVisitFormProps) {
   const { firebaseUser } = useAuth();
-  const { items: visits, save } = useCollection<BioVentingSystemVisit>("bioVentingSystemVisits");
+  const { items: visits } = useCollection<BioVentingSystemVisit>("bioVentingSystemVisits");
   const { items: allTreatmentWells } = useCollection<TreatmentWell>("treatmentWells");
   const wells = allTreatmentWells.filter((w) => w.systemId === system.id);
 
@@ -27,6 +29,16 @@ export function BioVentingVisitForm({ system, onDone }: BioVentingVisitFormProps
   const previousVisit = visits
     .filter((v) => v.systemId === system.id && v.id !== existingVisit?.id)
     .sort((a, b) => (a.visitDate < b.visitDate ? 1 : -1))[0];
+
+  // Excludes today's own (possibly still-being-edited) visit from its own history.
+  const pastVisits = visits.filter((v) => v.systemId === system.id && v.id !== existingVisit?.id);
+  const vacuumIntakeLineHistory = computeFieldHistory(pastVisits, (v) => v.visitDate, (v) => Math.abs(v.vacuumIntakeLine));
+  const flowOverallHistory = computeFieldHistory(pastVisits, (v) => v.visitDate, (v) => v.flowOverall);
+  const pressureOverallHistory = computeFieldHistory(pastVisits, (v) => v.visitDate, (v) => v.pressureOverall);
+
+  // Frozen at mount — what this form actually loaded, for conflict detection on save.
+  const [baseUpdatedAt] = useState<number | null>(existingVisit?.updatedAt ?? null);
+  const [conflictError, setConflictError] = useState<string | null>(null);
 
   const [statusOnArrival, setStatusOnArrival] = useState<"working" | "not_working">(existingVisit?.statusOnArrival ?? "working");
   const [filterStatus, setFilterStatus] = useState<"checked_ok" | "cleaned_now" | "recommend_replace">(
@@ -67,17 +79,22 @@ export function BioVentingVisitForm({ system, onDone }: BioVentingVisitFormProps
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!firebaseUser) return;
+    setConflictError(null);
 
     // Date.now() here runs inside a submit handler, not render — the
     // purity rule can't distinguish the two in this shape of code.
     // eslint-disable-next-line react-hooks/purity
     const createdAt = existingVisit?.createdAt ?? Date.now();
+    // eslint-disable-next-line react-hooks/purity
+    const updatedAt = Date.now();
     const payload: BioVentingSystemVisit = {
-      id: existingVisit?.id ?? newId(),
+      // Deterministic, not random — see FuelLensVisitForm's id comment.
+      id: existingVisit?.id ?? `${system.id}_${today}`,
       systemId: system.id,
       visitDate: existingVisit?.visitDate ?? today,
       createdBy: existingVisit?.createdBy ?? firebaseUser.uid,
       createdAt,
+      updatedAt,
       statusOnArrival,
       filterStatus,
       vacuumIntakeLine: -Math.abs(Number(vacuumIntakeLine) || 0),
@@ -94,8 +111,16 @@ export function BioVentingVisitForm({ system, onDone }: BioVentingVisitFormProps
         .map((p) => ({ id: p.id, pointCode: p.pointCode.trim(), depths: p.depths })),
     };
 
-    await save(payload);
-    onDone();
+    try {
+      await saveWithConflictCheck("bioVentingSystemVisits", payload, baseUpdatedAt);
+      onDone();
+    } catch (err) {
+      if (err instanceof ConflictError) {
+        setConflictError(err.message);
+        return;
+      }
+      throw err;
+    }
   }
 
   return (
@@ -130,14 +155,17 @@ export function BioVentingVisitForm({ system, onDone }: BioVentingVisitFormProps
           <label>
             וואקום בקו היניקה
             <input type="number" step="any" value={vacuumIntakeLine} onChange={(e) => setVacuumIntakeLine(e.target.value)} />
+            <FieldHistoryHint stats={vacuumIntakeLineHistory} />
           </label>
           <label>
             ספיקה כללית
             <input type="number" step="any" value={flowOverall} onChange={(e) => setFlowOverall(e.target.value)} />
+            <FieldHistoryHint stats={flowOverallHistory} />
           </label>
           <label>
             לחץ כללי
             <input type="number" step="any" value={pressureOverall} onChange={(e) => setPressureOverall(e.target.value)} />
+            <FieldHistoryHint stats={pressureOverallHistory} />
           </label>
         </div>
 
@@ -184,10 +212,11 @@ export function BioVentingVisitForm({ system, onDone }: BioVentingVisitFormProps
           )}
         </fieldset>
 
-        <ExtraParametersFields systemId={system.id} readings={extraReadings} onChange={setExtraReadings} />
+        <ExtraParametersFields systemId={system.id} readings={extraReadings} onChange={setExtraReadings} pastVisits={pastVisits} />
 
         <MonitoringPointFields points={monitoringPoints} onChange={setMonitoringPoints} />
 
+        {conflictError && <p className="field-error">{conflictError}</p>}
         <div>
           <button type="submit">שמור ביקור</button>
           <button type="button" onClick={onDone}>

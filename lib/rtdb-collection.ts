@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { onValue, ref, remove as removeRef, set } from "firebase/database";
+import { onValue, ref, remove as removeRef, runTransaction, set } from "firebase/database";
 import { getFirebaseDb } from "./firebase";
 
 /**
@@ -52,4 +52,46 @@ export function useCollection<T extends { id: string }>(path: string) {
 
 export function newId(): string {
   return crypto.randomUUID();
+}
+
+export class ConflictError extends Error {
+  constructor() {
+    super("מישהו אחר שינה רשומה זו בזמן שמילאת את הטופס — רענן את העמוד ובדוק את השינויים לפני שתשמור מחדש.");
+    this.name = "ConflictError";
+  }
+}
+
+/**
+ * Optimistic-concurrency save for records two technicians might edit at
+ * nearly the same moment — the "conflicting sync attempt on the same
+ * site/well" scenario from the spec. There's no offline outbox here to
+ * carry a full conflict-resolution UI (see docs/database-rules.md and
+ * the surrounding design notes on this stack's offline trade-offs), but
+ * a same-session, same-day double-edit is still worth catching: silently
+ * overwriting a colleague's already-saved visit is worse than making the
+ * second writer redo their entry.
+ *
+ * expectedUpdatedAt must be the `updatedAt` the form actually loaded
+ * (null when creating a brand-new record). The transaction aborts —
+ * throwing ConflictError instead of writing — if the record's live
+ * updatedAt no longer matches, meaning someone else's write landed in
+ * between.
+ */
+export async function saveWithConflictCheck<T extends { id: string; updatedAt: number }>(
+  path: string,
+  entity: T,
+  expectedUpdatedAt: number | null,
+): Promise<void> {
+  const sanitized = JSON.parse(JSON.stringify(entity)) as T;
+  const nodeRef = ref(getFirebaseDb(), `${path}/${entity.id}`);
+  const result = await runTransaction(nodeRef, (current: T | null) => {
+    const currentUpdatedAt = current?.updatedAt ?? null;
+    if (currentUpdatedAt !== expectedUpdatedAt) {
+      return undefined; // abort — the live record no longer matches what was loaded
+    }
+    return sanitized;
+  });
+  if (!result.committed) {
+    throw new ConflictError();
+  }
 }

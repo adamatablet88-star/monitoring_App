@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { EvacuationMethod, FuelLensVisit, NotMeasuredReason, Tank, Well } from "@/lib/types";
-import { newId, useCollection } from "@/lib/rtdb-collection";
+import { ConflictError, saveWithConflictCheck, useCollection } from "@/lib/rtdb-collection";
 import { useAuth } from "@/lib/auth-context";
 import { NOT_MEASURED_REASON_LABELS } from "./labels";
 
@@ -41,9 +41,12 @@ interface FuelLensVisitFormProps {
 
 export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisitFormProps) {
   const { firebaseUser } = useAuth();
-  const { save } = useCollection<FuelLensVisit>("fuelLensVisits");
   const { items: tanks } = useCollection<Tank>("tanks");
   const tank = well.tankId ? tanks.find((t) => t.id === well.tankId) : null;
+
+  // Frozen at mount — what this form actually loaded, for conflict detection on save.
+  const [baseUpdatedAt] = useState<number | null>(existingVisit?.updatedAt ?? null);
+  const [conflictError, setConflictError] = useState<string | null>(null);
 
   const [notMeasuredFlag, setNotMeasuredFlag] = useState(existingVisit?.notMeasured.flag ?? false);
   const [notMeasuredReason, setNotMeasuredReason] = useState<NotMeasuredReason | "">(
@@ -99,13 +102,21 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
     e.preventDefault();
     if (notMeasuredFlag && !notMeasuredReason) return;
     if (!firebaseUser) return;
+    setConflictError(null);
 
+    const visitDate = existingVisit?.visitDate ?? todayString();
     const payload: FuelLensVisit = {
-      id: existingVisit?.id ?? newId(),
+      // Deterministic, not random: two technicians opening this same
+      // well/day independently must collide on the same id, or the
+      // conflict check below can't catch a double "create" — each would
+      // otherwise get their own random id and both writes would silently
+      // succeed as separate, orphaned visits.
+      id: existingVisit?.id ?? `${well.id}_${visitDate}`,
       wellId: well.id,
-      visitDate: existingVisit?.visitDate ?? todayString(),
+      visitDate,
       createdBy: existingVisit?.createdBy ?? firebaseUser.uid,
       createdAt: existingVisit?.createdAt ?? Date.now(),
+      updatedAt: Date.now(),
       waterDepth: notMeasuredFlag ? null : waterDepthNum,
       productDepth: notMeasuredFlag ? null : productDepthNum,
       lensThickness,
@@ -133,8 +144,16 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
       };
     }
 
-    await save(payload);
-    onDone();
+    try {
+      await saveWithConflictCheck("fuelLensVisits", payload, baseUpdatedAt);
+      onDone();
+    } catch (err) {
+      if (err instanceof ConflictError) {
+        setConflictError(err.message);
+        return;
+      }
+      throw err;
+    }
   }
 
   return (
@@ -295,6 +314,7 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
           </button>
         </fieldset>
 
+        {conflictError && <p className="field-error">{conflictError}</p>}
         <div>
           <button type="submit">שמור ביקור</button>
           <button type="button" onClick={onDone}>

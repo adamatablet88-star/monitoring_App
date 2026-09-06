@@ -18,6 +18,8 @@ export interface FuelLensVisit {
   /** Stamped from auth on create — see lib/auth.ts / database.rules.json. */
   createdBy: string;
   createdAt: number;
+  /** Bumped on every save; used for optimistic-concurrency conflict detection — see lib/rtdb-collection.ts's saveWithConflictCheck. */
+  updatedAt: number;
   waterDepth: number | null;
   productDepth: number | null;
   /** Computed live: waterDepth - productDepth. */
@@ -79,6 +81,7 @@ export interface SveSystemVisit {
   visitDate: string;
   createdBy: string;
   createdAt: number;
+  updatedAt: number;
   visitType: SveVisitType;
 
   statusOnArrival: "running" | "off";
@@ -139,6 +142,7 @@ export interface BioVentingSystemVisit {
   visitDate: string;
   createdBy: string;
   createdAt: number;
+  updatedAt: number;
 
   statusOnArrival: "working" | "not_working";
   /** "recommend_replace" raises an admin-facing flag, display-only, like SVE's fault flag. */
@@ -189,6 +193,7 @@ export interface GroundwaterVisit {
   visitDate: string;
   createdBy: string;
   createdAt: number;
+  updatedAt: number;
   condition: WellCondition;
   waterDepth: number;
   productLens?: { present: boolean; thickness: number };

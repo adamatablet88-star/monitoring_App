@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import type { ParameterReading, SveSystemVisit, SveVisitType, SveWellVisit, TreatmentSystem, TreatmentWell } from "@/lib/types";
-import { newId, useCollection } from "@/lib/rtdb-collection";
+import { ConflictError, newId, saveWithConflictCheck, useCollection } from "@/lib/rtdb-collection";
 import { useAuth } from "@/lib/auth-context";
 import { ExtraParametersFields } from "../ExtraParametersFields";
 import { CriticalBanner } from "../CriticalBanner";
 import { isCriticalTriggered } from "../criticalThreshold";
+import { computeFieldHistory } from "../fieldHistory";
+import { FieldHistoryHint } from "../FieldHistoryHint";
 import { notMeasuredFieldToDraft, draftToNotMeasuredField } from "../notMeasured";
 import { SveWellVisitFields, type SveWellDraft } from "./SveWellVisitFields";
 
@@ -39,7 +41,7 @@ interface SveVisitFormProps {
 
 export function SveVisitForm({ system, onDone }: SveVisitFormProps) {
   const { firebaseUser } = useAuth();
-  const { items: visits, save } = useCollection<SveSystemVisit>("sveSystemVisits");
+  const { items: visits } = useCollection<SveSystemVisit>("sveSystemVisits");
   const { items: allTreatmentWells } = useCollection<TreatmentWell>("treatmentWells");
   const treatmentWells = allTreatmentWells.filter((w) => w.systemId === system.id && w.wellType === "treatment");
 
@@ -48,6 +50,17 @@ export function SveVisitForm({ system, onDone }: SveVisitFormProps) {
   const previousVisit = visits
     .filter((v) => v.systemId === system.id && v.id !== existingVisit?.id)
     .sort((a, b) => (a.visitDate < b.visitDate ? 1 : -1))[0];
+
+  // Excludes today's own (possibly still-being-edited) visit from its own history.
+  const pastVisits = visits.filter((v) => v.systemId === system.id && v.id !== existingVisit?.id);
+  const vacuumOverallHistory = computeFieldHistory(pastVisits, (v) => v.visitDate, (v) => Math.abs(v.vacuumOverall));
+  const flowOverallHistory = computeFieldHistory(pastVisits, (v) => v.visitDate, (v) => v.flowOverall);
+  const vacuumMoistureSeparatorHistory = computeFieldHistory(pastVisits, (v) => v.visitDate, (v) => Math.abs(v.vacuumMoistureSeparator));
+  const pidAfterHistory = computeFieldHistory(pastVisits, (v) => v.visitDate, (v) => v.pidAfterConverter);
+
+  // Frozen at mount — what this form actually loaded, for conflict detection on save.
+  const [baseUpdatedAt] = useState<number | null>(existingVisit?.updatedAt ?? null);
+  const [conflictError, setConflictError] = useState<string | null>(null);
 
   const [visitType, setVisitType] = useState<SveVisitType>(existingVisit?.visitType ?? "small");
   const [statusOnArrival, setStatusOnArrival] = useState<"running" | "off">(existingVisit?.statusOnArrival ?? "running");
@@ -125,9 +138,11 @@ export function SveVisitForm({ system, onDone }: SveVisitFormProps) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!firebaseUser) return;
+    setConflictError(null);
 
     const payload: SveSystemVisit = {
-      id: existingVisit?.id ?? newId(),
+      // Deterministic, not random — see FuelLensVisitForm's id comment.
+      id: existingVisit?.id ?? `${system.id}_${today}`,
       systemId: system.id,
       visitDate: existingVisit?.visitDate ?? today,
       createdBy: existingVisit?.createdBy ?? firebaseUser.uid,
@@ -135,6 +150,8 @@ export function SveVisitForm({ system, onDone }: SveVisitFormProps) {
       // purity rule can't distinguish the two in this shape of code.
       // eslint-disable-next-line react-hooks/purity
       createdAt: existingVisit?.createdAt ?? Date.now(),
+      // eslint-disable-next-line react-hooks/purity
+      updatedAt: Date.now(),
       visitType,
       statusOnArrival,
       startupAttempt: statusOnArrival === "off" && attemptedStartup ? { succeeded: startupSucceeded, faultFlagged: startupFaultFlagged } : undefined,
@@ -175,8 +192,16 @@ export function SveVisitForm({ system, onDone }: SveVisitFormProps) {
         : [],
     };
 
-    await save(payload);
-    onDone();
+    try {
+      await saveWithConflictCheck("sveSystemVisits", payload, baseUpdatedAt);
+      onDone();
+    } catch (err) {
+      if (err instanceof ConflictError) {
+        setConflictError(err.message);
+        return;
+      }
+      throw err;
+    }
   }
 
   return (
@@ -282,14 +307,17 @@ export function SveVisitForm({ system, onDone }: SveVisitFormProps) {
           <label>
             וואקום כללי
             <input type="number" step="any" value={vacuumOverall} onChange={(e) => setVacuumOverall(e.target.value)} />
+            <FieldHistoryHint stats={vacuumOverallHistory} />
           </label>
           <label>
             ספיקה כללית
             <input type="number" step="any" value={flowOverall} onChange={(e) => setFlowOverall(e.target.value)} />
+            <FieldHistoryHint stats={flowOverallHistory} />
           </label>
           <label>
             וואקום מפריד לחות
             <input type="number" step="any" value={vacuumMoistureSeparator} onChange={(e) => setVacuumMoistureSeparator(e.target.value)} />
+            <FieldHistoryHint stats={vacuumMoistureSeparatorHistory} />
           </label>
         </div>
 
@@ -332,6 +360,7 @@ export function SveVisitForm({ system, onDone }: SveVisitFormProps) {
           <label>
             PID אחרי ממיר
             <input type="number" step="any" value={pidAfter} onChange={(e) => setPidAfter(e.target.value)} />
+            <FieldHistoryHint stats={pidAfterHistory} />
           </label>
         </div>
         <p className="hint">יעילות מחושבת: {efficiencyPercent !== null ? `${efficiencyPercent.toFixed(1)}%` : "—"}</p>
@@ -361,7 +390,7 @@ export function SveVisitForm({ system, onDone }: SveVisitFormProps) {
           )}
         </fieldset>
 
-        <ExtraParametersFields systemId={system.id} readings={extraReadings} onChange={setExtraReadings} />
+        <ExtraParametersFields systemId={system.id} readings={extraReadings} onChange={setExtraReadings} pastVisits={pastVisits} />
 
         {showWellForms && treatmentWells.length > 0 && (
           <fieldset>
@@ -377,6 +406,7 @@ export function SveVisitForm({ system, onDone }: SveVisitFormProps) {
           </fieldset>
         )}
 
+        {conflictError && <p className="field-error">{conflictError}</p>}
         <div>
           <button type="submit">שמור ביקור</button>
           <button type="button" onClick={onDone}>

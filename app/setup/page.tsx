@@ -19,7 +19,7 @@ type Phase = "checking" | "available" | "already-set-up" | "done";
 
 export default function SetupPage() {
   const router = useRouter();
-  const { configError } = useAuth();
+  const { configError, refreshAppUser } = useAuth();
   const [phase, setPhase] = useState<Phase>("checking");
   const [checkError, setCheckError] = useState<string | null>(null);
   const [username, setUsername] = useState("");
@@ -45,6 +45,10 @@ export default function SetupPage() {
     setSubmitting(true);
     try {
       await bootstrapFirstAdmin(username, password);
+      // onAuthStateChanged's own role lookup can fire before the write
+      // above lands (see refreshAppUser's doc comment) — force a fresh
+      // read now that we know the write has actually completed.
+      await refreshAppUser();
       setPhase("done");
       router.replace("/");
     } catch (err) {

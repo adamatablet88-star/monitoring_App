@@ -11,6 +11,17 @@ interface AuthContextValue {
   loading: boolean;
   /** Set when Firebase itself failed to initialize (bad/missing env config). */
   configError: string | null;
+  /**
+   * Re-reads /users/{uid} for the current firebaseUser and updates
+   * appUser. Needed because the role lookup below only runs once, right
+   * when onAuthStateChanged fires — which for a brand-new account (see
+   * bootstrapFirstAdmin in lib/auth.ts) can race ahead of the database
+   * write that actually saves the role, landing on "no role yet" even
+   * though the write succeeds a moment later. Callers that just wrote
+   * their own /users/{uid} record should call this instead of trusting
+   * the automatic lookup to have caught it.
+   */
+  refreshAppUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -18,10 +29,11 @@ const AuthContext = createContext<AuthContextValue>({
   appUser: null,
   loading: true,
   configError: null,
+  refreshAppUser: async () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AuthContextValue>({
+  const [state, setState] = useState<Omit<AuthContextValue, "refreshAppUser">>({
     firebaseUser: null,
     appUser: null,
     loading: true,
@@ -54,7 +66,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe?.();
   }, []);
 
-  return <AuthContext.Provider value={state}>{children}</AuthContext.Provider>;
+  async function refreshAppUser() {
+    if (!state.firebaseUser) return;
+    const appUser = await fetchAppUser(state.firebaseUser.uid).catch(() => null);
+    setState((prev) => ({ ...prev, appUser }));
+  }
+
+  return <AuthContext.Provider value={{ ...state, refreshAppUser }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextValue {

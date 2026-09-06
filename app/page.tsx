@@ -6,6 +6,8 @@ import { useAuth } from "@/lib/auth-context";
 import { signOutUser } from "@/lib/auth";
 import { AdminApp } from "@/components/admin/AdminApp";
 import { FieldApp } from "@/components/field/FieldApp";
+import { DueThisMonthView } from "@/components/compliance/DueThisMonthView";
+import { TrendsView } from "@/components/trends/TrendsView";
 import "@/components/admin/admin.css";
 
 type MainTab = "field" | "due" | "trends" | "admin";
@@ -85,8 +87,8 @@ export default function Home() {
       </nav>
 
       {mainTab === "admin" && appUser.role === "admin" && <AdminApp />}
-      {mainTab === "due" && <p className="hint">מה נדרש החודש — בבנייה.</p>}
-      {mainTab === "trends" && <p className="hint">דשבורד מגמות — בבנייה.</p>}
+      {mainTab === "due" && <DueThisMonthView />}
+      {mainTab === "trends" && <TrendsView />}
       {mainTab === "field" && <FieldApp />}
       {mainTab === "admin" && appUser.role !== "admin" && <FieldApp />}
     </main>

@@ -17,7 +17,7 @@ import {
   signOut,
   type User as FirebaseUser,
 } from "firebase/auth";
-import { get, ref, set } from "firebase/database";
+import { get, ref, set, update } from "firebase/database";
 import { createSecondaryApp, getFirebaseAuth, getFirebaseDb } from "./firebase";
 import type { AppUser, Role } from "./types/user";
 
@@ -71,4 +71,38 @@ export async function createUser(username: string, password: string, role: Role)
     await signOut(secondaryAuth).catch(() => {});
     await deleteApp(secondaryApp).catch(() => {});
   }
+}
+
+/**
+ * True once the app has already been set up (a first admin exists).
+ * Reads the public /meta/setupComplete flag rather than /users itself,
+ * since this must work before anyone is signed in — the top-level RTDB
+ * rule requires auth != null for everything except this one flag.
+ */
+export async function isSetupComplete(): Promise<boolean> {
+  const snapshot = await get(ref(getFirebaseDb(), "meta/setupComplete"));
+  return snapshot.val() === true;
+}
+
+/**
+ * One-time bootstrap for the very first admin account — there's no admin
+ * yet to use createUser(), and no server to seed the database, so someone
+ * has to be the first. Safe to expose in the UI with no gate of its own:
+ * database.rules.json only allows this specific write (a user assigning
+ * themselves the admin role) while /meta/setupComplete is not yet true,
+ * and that flag can only ever flip false->true — so this stops being
+ * possible forever the instant it succeeds once. Both writes go through
+ * in one atomic multi-location update so the flag and the first admin
+ * record can never land separately. Runs on the primary app — unlike
+ * createUser(), there's no existing admin session here that a sign-in
+ * could clobber.
+ */
+export async function bootstrapFirstAdmin(username: string, password: string): Promise<void> {
+  const credential = await createUserWithEmailAndPassword(getFirebaseAuth(), usernameToEmail(username), password);
+  const uid = credential.user.uid;
+  const appUser: AppUser = { uid, username: username.trim(), role: "admin" };
+  await update(ref(getFirebaseDb()), {
+    [`users/${uid}`]: appUser,
+    "meta/setupComplete": true,
+  });
 }

@@ -5,11 +5,18 @@
 
     "_comment_rbac": "Port of field-monitoring-app/apps/server/src/sync/permissions.ts into RTDB Security Rules — there's no server here to enforce this in code, so these rules ARE the access-control layer. Role is looked up via root.child('users').child(auth.uid).child('role'), never trusted from client-submitted data.",
 
+    "_comment_bootstrap": "One-time first-admin bootstrap. /meta/setupComplete is a public boolean (readable even signed-out, since the setup page must know whether to show itself before anyone is authenticated) that can only ever flip false->true, never back. While it's not yet true, an authenticated user may write their OWN uid under /users as role 'admin' — nothing else — and lib/auth.ts's bootstrapFirstAdmin() sets both paths in one atomic multi-location update, so the flag and the first admin record always land together. See lib/auth.ts.",
+    "meta": {
+      "setupComplete": {
+        ".read": true,
+        ".write": "!data.exists() && newData.val() === true"
+      }
+    },
     "users": {
       ".read": "root.child('users').child(auth.uid).child('role').val() === 'admin'",
       "$uid": {
         ".read": "auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'admin'",
-        ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin'"
+        ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || (!root.child('meta').child('setupComplete').val() && auth.uid === $uid && newData.child('role').val() === 'admin')"
       }
     },
 

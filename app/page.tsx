@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { signOutUser } from "@/lib/auth";
 import { AdminApp } from "@/components/admin/AdminApp";
+import { FieldApp } from "@/components/field/FieldApp";
 import "@/components/admin/admin.css";
 
 type MainTab = "field" | "due" | "trends" | "admin";
@@ -86,8 +87,8 @@ export default function Home() {
       {mainTab === "admin" && appUser.role === "admin" && <AdminApp />}
       {mainTab === "due" && <p className="hint">מה נדרש החודש — בבנייה.</p>}
       {mainTab === "trends" && <p className="hint">דשבורד מגמות — בבנייה.</p>}
-      {mainTab === "field" && <p className="hint">טפסי שטח — בבנייה.</p>}
-      {mainTab === "admin" && appUser.role !== "admin" && <p className="hint">טפסי שטח — בבנייה.</p>}
+      {mainTab === "field" && <FieldApp />}
+      {mainTab === "admin" && appUser.role !== "admin" && <FieldApp />}
     </main>
   );
 }

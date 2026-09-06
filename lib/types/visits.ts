@@ -64,6 +64,7 @@ export type SveVisitType = "small" | "large" | "baseline";
 
 /** Only collected during a "large" or "baseline" visit, per treatment-type TreatmentWell. */
 export interface SveWellVisit {
+  id: string;
   treatmentWellId: string;
   vacuum?: NotMeasuredField<number>;
   pid?: NotMeasuredField<number>;
@@ -127,6 +128,7 @@ export interface MonitoringPointDepthReading {
 
 /** A monitoring point can have a variable number of depths — flexible per-point config. */
 export interface MonitoringPointReading {
+  id: string;
   pointCode: string;
   depths: MonitoringPointDepthReading[];
 }

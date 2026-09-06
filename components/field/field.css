@@ -1,0 +1,164 @@
+.field-app {
+  text-align: right;
+}
+
+.back-link {
+  background: none;
+  border: none;
+  color: #2563eb;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 0.5rem;
+  font: inherit;
+}
+
+.status-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  margin-inline-end: 0.4rem;
+}
+
+.status-badge.done {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-badge.pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.suggestion-box {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  margin: 0.25rem 0;
+}
+
+.suggestion-box p {
+  margin: 0 0 0.4rem;
+  font-size: 0.85rem;
+}
+
+.suggestion-chip {
+  background: #fff;
+  border: 1px solid #93c5fd;
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  margin-inline-end: 0.4rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.suggestion-chip.selected {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
+.critical-banner {
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  color: #991b1b;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  font-weight: 600;
+  margin: 0.25rem 0;
+}
+
+.not-measured-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+.checkbox-label.small {
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.well-visit-details {
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.well-visit-details summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.manifold-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.25rem 0;
+}
+
+.manifold-row input {
+  width: 5rem;
+}
+
+.monitoring-point {
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.depth-row {
+  flex-wrap: wrap;
+  align-items: end;
+  border-top: 1px dashed #ddd;
+  padding-top: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+.depth-row label {
+  min-width: 5rem;
+}
+
+.parameter-reading-row {
+  margin: 0.5rem 0;
+}
+
+.stabilization-row {
+  flex-wrap: wrap;
+  align-items: end;
+  border-top: 1px dashed #ddd;
+  padding-top: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+.stabilization-row label {
+  min-width: 4.5rem;
+}
+
+.sequence-badge {
+  font-weight: 600;
+  color: #555;
+  align-self: center;
+}
+
+.active-status-details {
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  margin: 0.75rem 0;
+}
+
+.active-status-details summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.active-status-details .panel {
+  border: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+}

@@ -58,3 +58,21 @@ export function getFirebaseDb(): Database {
   if (!dbInstance) dbInstance = getDatabase(ensureApp());
   return dbInstance;
 }
+
+/**
+ * A throwaway, separately-named Firebase App sharing the same project
+ * config. Used by admin-side user creation: Firebase Auth's client SDK
+ * signs in as whoever createUserWithEmailAndPassword() just created, so
+ * creating a new technician/admin login on the *primary* app would kick
+ * the admin out of their own session. Running it on a secondary app
+ * keeps the admin's session untouched; the caller is responsible for
+ * signing the secondary app's user out and calling deleteApp() on it
+ * once done.
+ */
+export function createSecondaryApp(name: string): FirebaseApp {
+  if (typeof window === "undefined") {
+    throw new Error("Firebase is client-only in this app — don't call this during server-side rendering.");
+  }
+  const existing = getApps().find((candidate) => candidate.name === name);
+  return existing ?? initializeApp(firebaseConfig, name);
+}

@@ -1,0 +1,72 @@
+{
+  "rules": {
+    ".read": "auth != null",
+    ".write": false,
+
+    "_comment_rbac": "Port of field-monitoring-app/apps/server/src/sync/permissions.ts into RTDB Security Rules — there's no server here to enforce this in code, so these rules ARE the access-control layer. Role is looked up via root.child('users').child(auth.uid).child('role'), never trusted from client-submitted data.",
+
+    "users": {
+      ".read": "root.child('users').child(auth.uid).child('role').val() === 'admin'",
+      "$uid": {
+        ".read": "auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'admin'",
+        ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin'"
+      }
+    },
+
+    "_comment_structural": "Admin-only structural entities — matches ADMIN_ONLY_ENTITY_TYPES in the original permissions.ts (client/site/tank/treatmentSystem/parameterConfig), plus the frequency/regulatory admin-only entities from roadmap step 9.",
+    "clients": { "$id": { ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin'" } },
+    "sites": { "$id": { ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin'" } },
+    "tanks": { "$id": { ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin'" } },
+    "treatmentSystems": { "$id": { ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin'" } },
+    "parameterConfigs": { "$id": { ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin'" } },
+    "frequencySettings": { "$id": { ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin'" } },
+    "regulatoryReports": { "$id": { ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin'" } },
+    "scheduledSpecialTests": { "$id": { ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin'" } },
+
+    "_comment_wells": "WELL_ENTITY_TYPES in the original: admin has full control; a technician may only UPDATE an existing well (report its status), never create or delete one. data.exists() && newData.exists() is RTDB's way to express 'this is an update, not a create or delete'.",
+    "wells": {
+      "$id": {
+        ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || (data.exists() && newData.exists())"
+      }
+    },
+    "treatmentWells": {
+      "$id": {
+        ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || (data.exists() && newData.exists())"
+      }
+    },
+    "groundwaterWells": {
+      "$id": {
+        ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || (data.exists() && newData.exists())"
+      }
+    },
+
+    "_comment_visits": "VISIT_ENTITY_TYPES in the original: a technician may create freely (createdBy must be their own uid — never trusted otherwise, same principle as the original server stamping it), and may only edit/delete a visit they created themselves. The original checked 'same calendar day'; RTDB rules have no calendar, so this uses a 24-hour rolling window from createdAt instead — a deliberate simplification, not identical semantics.",
+    "fuelLensVisits": {
+      "$id": {
+        ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || (!data.exists() && newData.exists() && newData.child('createdBy').val() === auth.uid) || (data.exists() && data.child('createdBy').val() === auth.uid && (now - data.child('createdAt').val()) < 86400000)"
+      }
+    },
+    "sveSystemVisits": {
+      "$id": {
+        ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || (!data.exists() && newData.exists() && newData.child('createdBy').val() === auth.uid) || (data.exists() && data.child('createdBy').val() === auth.uid && (now - data.child('createdAt').val()) < 86400000)"
+      }
+    },
+    "bioVentingSystemVisits": {
+      "$id": {
+        ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || (!data.exists() && newData.exists() && newData.child('createdBy').val() === auth.uid) || (data.exists() && data.child('createdBy').val() === auth.uid && (now - data.child('createdAt').val()) < 86400000)"
+      }
+    },
+    "groundwaterVisits": {
+      "$id": {
+        ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || (!data.exists() && newData.exists() && newData.child('createdBy').val() === auth.uid) || (data.exists() && data.child('createdBy').val() === auth.uid && (now - data.child('createdAt').val()) < 86400000)"
+      }
+    },
+
+    "_comment_activeStatus": "TECHNICIAN_WRITABLE_ENTITY_TYPES in the original: both roles can create/update, nobody but admin deletes. There's no server to stamp 'source' after the fact, so this rule instead VALIDATES that whatever the client submits for source matches the writer's actual role — a technician cannot claim source: 'admin', and vice versa.",
+    "activeStatuses": {
+      "$id": {
+        ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || (newData.exists() && newData.child('source').val() === root.child('users').child(auth.uid).child('role').val())"
+      }
+    }
+  }
+}

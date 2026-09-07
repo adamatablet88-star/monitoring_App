@@ -68,7 +68,7 @@ technician, כולל אכיפת בעלות על ביקורים (24 שעות מר
 ### 18.1 קידוח — תעודת זהות
 - [x] שם/מזהה, X, Y, Z, שוחה (סוג+מידה), עומק, קוטר, מקטע מחורץ מ-עד
 - [x] **TOC (נקודת ייחוס למדידה)** — נוסף ל-`WellIdentity` (`toc: number`), משותף לכל שלושת סוגי הקידוח (עדשת דלק/מערכת טיפול/מי תהום) דרך `IdentityFields.tsx`/`identityForm.ts`.
-- [ ] **wellType** (treatment/monitoring/groundwater) — קיים ✅
+- [x] **wellType** (treatment/monitoring/groundwater) — קיים (`TreatmentWell.wellType`).
 - [x] **אמצעי פינוי נוכחי (`recoveryMethod`) — הוסב ל-field-derived.**
   מסך הקמת האתר (`WellsPanel.tsx`) כבר לא שואל על אמצעי פינוי/מיכל;
   `FuelLensVisitForm.tsx` מוסיף שדה "אמצעי פינוי נוכחי" (+ מיכל כשפעיל)

@@ -1,4 +1,5 @@
-import type { FuelLensVisit } from "@/lib/types";
+import type { FuelLensVisit, Tank, Well } from "@/lib/types";
+import { computeTankAccumulation } from "@/lib/tankAccumulation";
 import type { TrendSeries } from "./TrendChart";
 import { SERIES_COLORS } from "./TrendChart";
 import { quarterKey } from "./timeRange";
@@ -38,6 +39,35 @@ export interface EvacuationQuarterSummary {
   quarter: string;
   byMethod: Record<string, number>;
   absorbentReplacedCount: number;
+}
+
+export interface TankAccumulationRow {
+  tankId: string;
+  label: string;
+  wellCodes: string;
+  currentVolume: number | null;
+  totalCollected: number;
+  readingsCount: number;
+}
+
+/** Spec section 8 — shared-tank accumulated volume, site-wide (not scoped to the well comparison selector above). */
+export function tankAccumulationRows(tanks: Tank[], wells: Well[], visits: FuelLensVisit[]): TankAccumulationRow[] {
+  const rows: TankAccumulationRow[] = [];
+  for (const tank of tanks) {
+    const tankWells = wells.filter((w) => w.recoveryMethod === "active_skimmer" && w.tankId === tank.id);
+    if (tankWells.length === 0) continue;
+    const tankWellIds = new Set(tankWells.map((w) => w.id));
+    const accumulation = computeTankAccumulation(visits.filter((v) => tankWellIds.has(v.wellId)));
+    rows.push({
+      tankId: tank.id,
+      label: tank.label,
+      wellCodes: tankWells.map((w) => w.code).join(", "),
+      currentVolume: accumulation.currentVolume,
+      totalCollected: accumulation.totalCollected,
+      readingsCount: accumulation.readingsCount,
+    });
+  }
+  return rows;
 }
 
 /** "כמות שפונתה בפועל לפי שיטה" + "סופחים שהוחלפו". */

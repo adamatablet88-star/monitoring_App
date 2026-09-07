@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import type { EvacuationMethod, FuelLensVisit, Site, Tank, Well } from "@/lib/types";
+import { computeTankAccumulation } from "@/lib/tankAccumulation";
 
 const RECOVERY_LABELS: Record<Well["recoveryMethod"], string> = {
   none: "ללא אמצעי",
@@ -110,7 +111,9 @@ export async function buildFuelLensWorkbook(params: {
     }
   }
 
-  // טבלה 3 — סקימר אקטיבי, מקובץ לפי מיכל משותף.
+  // טבלה 3 — סקימר אקטיבי, מקובץ לפי מיכל משותף. כולל צבירה מצטברת
+  // לאורך זמן (סעיף 8) — currentVolume לבדו הוא רק תמונת מצב מהביקור
+  // האחרון, לא כמה שהמיכל הזה כבר אסף בסך הכול מאז שהחל להימדד.
   const tankSheet = workbook.addWorksheet("טבלה 3 - סקימר אקטיבי");
   tankSheet.views = [{ rightToLeft: true }];
   tankSheet.columns = [
@@ -118,6 +121,7 @@ export async function buildFuelLensWorkbook(params: {
     { header: "קידוחים משויכים", key: "wells", width: 30 },
     { header: "נפח נוכחי (מהביקור האחרון)", key: "volume", width: 22 },
     { header: "רוקן מאז הביקור הקודם", key: "emptied", width: 20 },
+    { header: "סה״כ נאסף לאורך זמן (ליטר)", key: "totalCollected", width: 22 },
   ];
   tankSheet.getRow(1).font = { bold: true };
   const activeSkimmerWells = wells.filter((w) => w.recoveryMethod === "active_skimmer" && w.tankId);
@@ -131,14 +135,17 @@ export async function buildFuelLensWorkbook(params: {
     const tankWells = wellIdsByTank.get(tank.id);
     if (!tankWells || tankWells.length === 0) continue;
     const tankWellIds = new Set(tankWells.map((w) => w.id));
-    const latestReading = visits
-      .filter((v) => tankWellIds.has(v.wellId) && v.tankReading)
+    const tankVisits = visits.filter((v) => tankWellIds.has(v.wellId));
+    const accumulation = computeTankAccumulation(tankVisits);
+    const latestReading = tankVisits
+      .filter((v) => v.tankReading)
       .sort((a, b) => b.visitDate.localeCompare(a.visitDate))[0];
     tankSheet.addRow({
       tank: tank.label,
       wells: tankWells.map((w) => w.code).join(", "),
-      volume: latestReading?.tankReading?.currentVolume ?? "—",
+      volume: accumulation.currentVolume ?? "—",
       emptied: latestReading?.tankReading ? (latestReading.tankReading.emptiedSincePrevious ? "כן" : "לא") : "—",
+      totalCollected: accumulation.totalCollected,
     });
   }
 

@@ -8,13 +8,20 @@ import type {
   Site,
   SveSystemVisit,
   SystemType,
+  Tank,
   TreatmentSystem,
   Well,
 } from "@/lib/types";
 import { useCollection } from "@/lib/rtdb-collection";
 import { TrendChart } from "./TrendChart";
 import { cutoffDateFor, quarterlyAverageTable, TIME_RANGE_LABELS, type TimeRange } from "./timeRange";
-import { FUEL_LENS_METRIC_LABELS, fuelLensQuarterlySummary, fuelLensSeriesFor, type FuelLensMetric } from "./fuelLensTrends";
+import {
+  FUEL_LENS_METRIC_LABELS,
+  fuelLensQuarterlySummary,
+  fuelLensSeriesFor,
+  tankAccumulationRows,
+  type FuelLensMetric,
+} from "./fuelLensTrends";
 import { SVE_METRIC_LABELS, sveSeriesFor, type SveMetric } from "./sveTrends";
 import { BIO_VENTING_METRIC_LABELS, bioVentingSeriesFor, type BioVentingMetric } from "./bioVentingTrends";
 import { FuelLensExportButton } from "@/components/export/FuelLensExportButton";
@@ -53,6 +60,7 @@ export function TrendsView() {
   const { items: clients } = useCollection<Client>("clients");
   const { items: sites } = useCollection<Site>("sites");
   const { items: wells } = useCollection<Well>("wells");
+  const { items: tanks } = useCollection<Tank>("tanks");
   const { items: systems } = useCollection<TreatmentSystem>("treatmentSystems");
   const { items: fuelLensVisits } = useCollection<FuelLensVisit>("fuelLensVisits");
   const { items: sveVisits } = useCollection<SveSystemVisit>("sveSystemVisits");
@@ -125,6 +133,17 @@ export function TrendsView() {
       ? fuelLensQuarterlySummary(fuelLensVisits.filter((v) => selectedIds.includes(v.wellId) && inRange(v.visitDate)))
       : [];
   const evacuationMethods = Array.from(new Set(fuelLensQuarterly.flatMap((q) => Object.keys(q.byMethod))));
+
+  // צבירת מיכל משותף (סעיף 8) — ברמת האתר כולו, לא תלוי בבחירת הקידוחים
+  // להשוואה למעלה: מיכל אחד יכול להיות מוזן ממספר קידוחים בו-זמנית.
+  const tankRows =
+    protocol === "fuelLens" && siteId
+      ? tankAccumulationRows(
+          tanks.filter((t) => t.siteId === siteId),
+          siteWells,
+          fuelLensVisits,
+        )
+      : [];
 
   return (
     <div className="field-app">
@@ -221,6 +240,33 @@ export function TrendsView() {
                 ))}
               </select>
             </label>
+          )}
+
+          {protocol === "fuelLens" && tankRows.length > 0 && (
+            <>
+              <h3>צבירת מיכלים משותפים (סקימר אקטיבי)</h3>
+              <p className="hint">ברמת האתר כולו — לא תלוי בבחירת הקידוחים להשוואה למעלה, כי מיכל אחד יכול להיות מוזן ממספר קידוחים.</p>
+              <table className="trend-summary-table">
+                <thead>
+                  <tr>
+                    <th>מיכל</th>
+                    <th>קידוחים משויכים</th>
+                    <th>נפח נוכחי</th>
+                    <th>סה״כ נאסף לאורך זמן (ליטר)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tankRows.map((row) => (
+                    <tr key={row.tankId}>
+                      <td>{row.label}</td>
+                      <td>{row.wellCodes}</td>
+                      <td>{row.currentVolume ?? "—"}</td>
+                      <td>{row.totalCollected}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
           )}
 
           {selectedIds.length === 0 ? (

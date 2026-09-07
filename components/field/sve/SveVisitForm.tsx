@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { ParameterReading, SveSystemVisit, SveVisitType, SveWellVisit, TreatmentSystem, TreatmentWell } from "@/lib/types";
 import { ConflictError, newId, saveWithConflictCheck, useCollection } from "@/lib/rtdb-collection";
 import { SVE_PARAMETER_KEYS } from "@/lib/defaultParameters";
+import { computeSveEfficiencyPercent } from "@/lib/sveEfficiency";
 import { useAuth } from "@/lib/auth-context";
 import { ExtraParametersFields } from "../ExtraParametersFields";
 import { computeFieldHistory } from "../fieldHistory";
@@ -102,10 +103,7 @@ export function SveVisitForm({ system, onDone }: SveVisitFormProps) {
 
   const pidBeforeNum = readingValue(extraReadings, system.id, SVE_PARAMETER_KEYS.pidBeforeConverter);
   const pidAfterNum = readingValue(extraReadings, system.id, SVE_PARAMETER_KEYS.pidAfterConverter);
-  const efficiencyPercent =
-    pidBeforeNum !== null && pidAfterNum !== null && pidBeforeNum > 0
-      ? ((pidBeforeNum - pidAfterNum) / pidBeforeNum) * 100
-      : null;
+  const efficiencyPercent = computeSveEfficiencyPercent(pidBeforeNum, pidAfterNum);
 
   const showRunningFields = statusOnArrival === "running" || (attemptedStartup && startupSucceeded);
   const showWellForms = visitType === "large" || visitType === "baseline";

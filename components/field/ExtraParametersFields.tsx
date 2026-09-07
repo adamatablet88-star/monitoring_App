@@ -2,6 +2,7 @@
 
 import type { ParameterConfig, ParameterReading } from "@/lib/types";
 import { useCollection } from "@/lib/rtdb-collection";
+import { isOutOfRange, toDisplayValue, toStorageValue } from "@/lib/parameterMath";
 import { isCriticalTriggered } from "./criticalThreshold";
 import { CriticalBanner } from "./CriticalBanner";
 import { computeFieldHistory } from "./fieldHistory";
@@ -48,7 +49,7 @@ export function ExtraParametersFields({ systemId, readings, onChange, pastVisits
   function displayValueFor(param: ParameterConfig): string {
     const stored = storedValueFor(param.id);
     if (stored === null) return "";
-    return String(param.invertSign ? Math.abs(stored) : stored);
+    return String(toDisplayValue(stored, param.invertSign));
   }
 
   function setValue(param: ParameterConfig, raw: string) {
@@ -57,8 +58,7 @@ export function ExtraParametersFields({ systemId, readings, onChange, pastVisits
       onChange(rest);
       return;
     }
-    const typed = Number(raw);
-    const stored = param.invertSign ? -Math.abs(typed) : typed;
+    const stored = toStorageValue(Number(raw), param.invertSign);
     const note = readings.find((r) => r.parameterId === param.id)?.note;
     onChange([...rest, { parameterId: param.id, value: stored, note }]);
   }
@@ -78,7 +78,7 @@ export function ExtraParametersFields({ systemId, readings, onChange, pastVisits
       .sort((a, b) => (a.visitDate < b.visitDate ? 1 : -1));
     if (withReading.length === 0) return null;
     const raw = withReading[0].extraReadings.find((r) => r.parameterId === param.id)!.value;
-    return param.invertSign ? Math.abs(raw) : raw;
+    return toDisplayValue(raw, param.invertSign);
   }
 
   return (
@@ -87,15 +87,13 @@ export function ExtraParametersFields({ systemId, readings, onChange, pastVisits
       {parameters.map((param) => {
         const stored = storedValueFor(param.id);
         const display = displayValueFor(param);
-        const outOfRange =
-          stored !== null &&
-          ((param.minValue !== null && stored < param.minValue) || (param.maxValue !== null && stored > param.maxValue));
+        const outOfRange = stored !== null && isOutOfRange(stored, param.minValue, param.maxValue);
         const critical = isCriticalTriggered(stored, param);
         // Both compared in display-space (sign-flipped back to positive for
         // invertSign parameters) — stored is in storage-space and would
         // otherwise be compared against the wrong sign for a hypothetical
         // parameter that's both invertSign and monotonicIncreasing.
-        const currentDisplay = stored !== null ? (param.invertSign ? Math.abs(stored) : stored) : null;
+        const currentDisplay = stored !== null ? toDisplayValue(stored, param.invertSign) : null;
         const previousValue = param.monotonicIncreasing ? previousValueFor(param) : null;
         const decreased = previousValue !== null && currentDisplay !== null && currentDisplay < previousValue;
         const currentNote = readings.find((r) => r.parameterId === param.id)?.note ?? "";
@@ -106,7 +104,7 @@ export function ExtraParametersFields({ systemId, readings, onChange, pastVisits
               (v) => {
                 const value = v.extraReadings.find((r) => r.parameterId === param.id)?.value;
                 if (value === undefined) return undefined;
-                return param.invertSign ? Math.abs(value) : value;
+                return toDisplayValue(value, param.invertSign);
               },
             )
           : null;

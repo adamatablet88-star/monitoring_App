@@ -6,6 +6,7 @@ import type { EvacuationMethod, FuelLensVisit, NotMeasuredReason, RecoveryMethod
 import { ConflictError, saveWithConflictCheck, useCollection } from "@/lib/rtdb-collection";
 import { useAuth } from "@/lib/auth-context";
 import { getFirebaseDb } from "@/lib/firebase";
+import { computeLensThickness } from "@/lib/fuelLens";
 import { NOT_MEASURED_REASON_LABELS } from "./labels";
 
 const EVACUATION_METHOD_LABELS: Record<EvacuationMethod, string> = {
@@ -104,8 +105,7 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
 
   const waterDepthNum = waterDepth.trim() ? Number(waterDepth) : null;
   const productDepthNum = productDepth.trim() ? Number(productDepth) : null;
-  const lensThickness =
-    !notMeasuredFlag && waterDepthNum !== null && productDepthNum !== null ? waterDepthNum - productDepthNum : null;
+  const lensThickness = !notMeasuredFlag ? computeLensThickness(waterDepthNum, productDepthNum) : null;
 
   const showAutoSuggestion =
     recoveryMethod === "passive_skimmer" && skimmerFound === "empty" && lensThickness !== null && lensThickness > 0;
@@ -133,6 +133,12 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
     setConflictError(null);
 
     const visitDate = existingVisit?.visitDate ?? todayString();
+    // Date.now() here runs inside a submit handler, not render — the
+    // purity rule can't distinguish the two in this shape of code.
+    // eslint-disable-next-line react-hooks/purity
+    const createdAt = existingVisit?.createdAt ?? Date.now();
+    // eslint-disable-next-line react-hooks/purity
+    const updatedAt = Date.now();
     const payload: FuelLensVisit = {
       // Deterministic, not random: two technicians opening this same
       // well/day independently must collide on the same id, or the
@@ -143,8 +149,8 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
       wellId: well.id,
       visitDate,
       createdBy: existingVisit?.createdBy ?? firebaseUser.uid,
-      createdAt: existingVisit?.createdAt ?? Date.now(),
-      updatedAt: Date.now(),
+      createdAt,
+      updatedAt,
       recoveryMethod,
       tankId: recoveryMethod === "active_skimmer" && tankId ? tankId : undefined,
       waterDepth: notMeasuredFlag ? null : waterDepthNum,

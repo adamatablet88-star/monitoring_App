@@ -61,6 +61,23 @@
    הפרמטרים הגמיש (`components/field/fieldHistory.ts` +
    `FieldHistoryHint.tsx`).
 
+## בדיקות (Vitest)
+
+`npm run test` מריץ בדיקות יחידה (Vitest) על הלוגיקה הטהורה של האפליקציה
+— חישוב עובי עדשה, נפח באר, יעילות SVE, המרת סימן וואקום (invertSign),
+ולידציה רכה (טווח תקין), צבירת מיכל משותף, כלל הייצוב לדיגום מי תהום,
+וחישוב סטטוס "מה נדרש החודש". כל אלה חיו בעבר כחישובים מוטבעים בתוך
+קומפוננטות טופס (`FuelLensVisitForm.tsx` וכו') — הוצאו ל-`lib/*.ts`
+(או נשארו מודולים עצמאיים כמו `stabilization.ts`) בדיוק כדי שיהיו
+ניתנים לבדיקה בבידוד מ-React/Firebase.
+
+**לא מכוסה בבדיקות האוטומטיות האלה**: כללי ה-RBAC ב-`database.rules.json`
+— אלה מאומתים ידנית מול Database Emulator אמיתי (ראו
+`docs/database-rules.md`), לא כחלק מ-`npm run test`, כי הרצת אמולטור
+Java היא תשתית שונה לגמרי מ-Vitest. זרימות UI מלאות (טפסי שדה, מסכי
+ניהול) גם אינן מכוסות — אין React Testing Library/Playwright בפרויקט
+הזה נכון לעכשיו.
+
 ## הקמה (Setup)
 
 1. פתחו פרויקט ב-[console.firebase.google.com](https://console.firebase.google.com).
@@ -95,4 +112,5 @@
 npm run dev      # שרת פיתוח עם hot reload, http://localhost:3000
 npm run build    # static export לייצור → out/
 npm run lint
+npm run test     # בדיקות יחידה (Vitest) — ראו "בדיקות" למעלה
 ```

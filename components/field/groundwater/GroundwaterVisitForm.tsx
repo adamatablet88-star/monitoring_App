@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { GroundwaterVisit, GroundwaterWell, StabilizationReading } from "@/lib/types";
 import { ConflictError, saveWithConflictCheck } from "@/lib/rtdb-collection";
 import { useAuth } from "@/lib/auth-context";
+import { computeWellVolumeLiters } from "@/lib/wellVolume";
 import { isStabilized } from "./stabilization";
 import { COMMON_LAB_TESTS, containerFor } from "./labTests";
 
@@ -51,11 +52,8 @@ export function GroundwaterVisitForm({ well, existingVisit, onDone }: Groundwate
   const waterDepthNum = waterDepth.trim() ? Number(waterDepth) : null;
   const samplingDepth = manualSamplingDepth ?? (waterDepthNum !== null ? (waterDepthNum + 1).toFixed(2) : "");
 
-  const columnHeight = waterDepthNum !== null ? Math.max(0, well.wellDepth - waterDepthNum) : null;
-  // Well volume from depth/diameter: standard purge-volume calculation for a
-  // cylindrical casing. Diameter assumed given in inches, depth in meters.
-  const radiusMeters = (well.wellDiameter * 0.0254) / 2;
-  const wellVolumeLiters = columnHeight !== null ? Math.PI * radiusMeters ** 2 * columnHeight * 1000 : null;
+  const wellVolumeLiters =
+    waterDepthNum !== null ? computeWellVolumeLiters(well.wellDepth, well.wellDiameter, waterDepthNum) : null;
 
   const stabilized = isStabilized(stabilizationLog);
 
@@ -88,14 +86,20 @@ export function GroundwaterVisitForm({ well, existingVisit, onDone }: Groundwate
     setConflictError(null);
 
     const visitDate = existingVisit?.visitDate ?? todayString();
+    // Date.now() here runs inside a submit handler, not render — the
+    // purity rule can't distinguish the two in this shape of code.
+    // eslint-disable-next-line react-hooks/purity
+    const createdAt = existingVisit?.createdAt ?? Date.now();
+    // eslint-disable-next-line react-hooks/purity
+    const updatedAt = Date.now();
     const payload: GroundwaterVisit = {
       // Deterministic, not random — see FuelLensVisitForm's id comment.
       id: existingVisit?.id ?? `${well.id}_${visitDate}`,
       wellId: well.id,
       visitDate,
       createdBy: existingVisit?.createdBy ?? firebaseUser.uid,
-      createdAt: existingVisit?.createdAt ?? Date.now(),
-      updatedAt: Date.now(),
+      createdAt,
+      updatedAt,
       condition: { capIntegrity, casingIntegrity },
       waterDepth: waterDepthNum ?? 0,
       productLens: productLensPresent ? { present: true, thickness: Number(productLensThickness) || 0 } : undefined,

@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import type { RecoveryMethod, Well, Tank } from "@/lib/types";
-import { newId, useCollection } from "@/lib/rtdb-collection";
+import { logStructureChange, newId, useCollection } from "@/lib/rtdb-collection";
+import { useAuth } from "@/lib/auth-context";
 import { IdentityFields } from "./IdentityFields";
 import { emptyIdentityDraft, draftToIdentity, isIdentityDraftValid, type IdentityDraft } from "./identityForm";
+import { StructureAuditLog } from "./StructureAuditLog";
 
 const RECOVERY_LABELS: Record<RecoveryMethod, string> = {
   none: "ללא אמצעי",
@@ -18,6 +20,8 @@ interface WellsPanelProps {
 }
 
 export function WellsPanel({ siteId }: WellsPanelProps) {
+  const { appUser } = useAuth();
+  const changedBy = appUser?.username ?? "לא ידוע";
   const { items: allWells, save, remove } = useCollection<Well>("wells");
   const { items: allTanks } = useCollection<Tank>("tanks");
   const wells = allWells.filter((w) => w.siteId === siteId);
@@ -36,13 +40,20 @@ export function WellsPanel({ siteId }: WellsPanelProps) {
     if (!isIdentityDraftValid(draft)) return;
     // אמצעי הפינוי אינו נבחר כאן — הטכנאי מדווח/מעדכן אותו בכל ביקור
     // (ראו FuelLensVisitForm), והערך מתחיל ב"ללא אמצעי" עד לביקור הראשון.
+    const identity = draftToIdentity(draft);
     await save({
       id: newId(),
       siteId,
-      ...draftToIdentity(draft),
+      ...identity,
       recoveryMethod: "none",
     });
+    await logStructureChange("well", siteId, identity.code, "created", changedBy);
     setShowForm(false);
+  }
+
+  async function handleRemove(well: Well) {
+    await remove(well);
+    await logStructureChange("well", siteId, well.code, "deleted", changedBy);
   }
 
   return (
@@ -55,13 +66,15 @@ export function WellsPanel({ siteId }: WellsPanelProps) {
               {well.code} — {RECOVERY_LABELS[well.recoveryMethod]}
               {well.tankId && ` · מיכל: ${tanks.find((t) => t.id === well.tankId)?.label ?? well.tankId}`}
             </span>
-            <button type="button" className="danger-link" onClick={() => remove(well)}>
+            <button type="button" className="danger-link" onClick={() => handleRemove(well)}>
               מחק
             </button>
           </li>
         ))}
         {wells.length === 0 && <li className="empty-hint">אין עדיין קידוחי עדשת דלק באתר זה</li>}
       </ul>
+
+      <StructureAuditLog entityType="well" scopeId={siteId} />
 
       {showForm ? (
         <form onSubmit={handleSubmit} className="inline-form stacked">

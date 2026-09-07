@@ -70,6 +70,11 @@ completed `/setup`.
   so this rule instead *validates* that whatever the client submits for
   `source` matches the writer's actual role — a technician cannot claim
   `source: "admin"`, and vice versa.
+- **Structural audit log** (`structureAuditLog`) — admin-only, and
+  append-only: `!data.exists() && newData.exists()` means an entry can be
+  created but never edited or deleted afterward, once written. This is the
+  Audit Trail for creating/deleting a Well/TreatmentSystem/Site (spec
+  18.8) — see `lib/rtdb-collection.ts`'s `logStructureChange`.
 
 ## How this was verified
 

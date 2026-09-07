@@ -1,4 +1,4 @@
-import type { ParameterConfig, SystemType } from "@/lib/types";
+import type { ParameterChangeRecord, ParameterConfig, SystemType } from "@/lib/types";
 
 /**
  * The spec's suggested default parameter set for a newly-created system —
@@ -19,8 +19,17 @@ import type { ParameterConfig, SystemType } from "@/lib/types";
  * per-monitoring-point, per-depth O2/CO2 already tracked in
  * BioVentingSystemVisit.monitoringPoints, not a duplicate of it.
  */
-export function defaultParametersFor(systemId: string, systemType: SystemType): ParameterConfig[] {
-  const common = { systemId, active: true, required: false, criticalDirection: "none", criticalValue: null, criticalMessage: "" } as const;
+export function defaultParametersFor(systemId: string, systemType: SystemType, createdBy: string): ParameterConfig[] {
+  const history: ParameterChangeRecord[] = [{ changedBy: createdBy, changedAt: new Date().toISOString(), action: "created" }];
+  const common = {
+    systemId,
+    active: true,
+    required: false,
+    criticalDirection: "none",
+    criticalValue: null,
+    criticalMessage: "",
+    history,
+  } as const;
 
   if (systemType === "SVE") {
     return [

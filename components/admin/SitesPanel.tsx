@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import type { ProtocolType, Site, SiteStatus } from "@/lib/types";
-import { newId, useCollection } from "@/lib/rtdb-collection";
+import { logStructureChange, newId, useCollection } from "@/lib/rtdb-collection";
+import { useAuth } from "@/lib/auth-context";
+import { StructureAuditLog } from "./StructureAuditLog";
 
 const PROTOCOL_LABELS: Record<ProtocolType, string> = {
   fuelLens: "עדשת דלק",
@@ -23,6 +25,8 @@ interface SitesPanelProps {
 }
 
 export function SitesPanel({ clientId, selectedSiteId, onSelect }: SitesPanelProps) {
+  const { appUser } = useAuth();
+  const changedBy = appUser?.username ?? "לא ידוע";
   const { items: allSites, save, remove } = useCollection<Site>("sites");
   const sites = allSites.filter((s) => s.clientId === clientId);
 
@@ -43,10 +47,11 @@ export function SitesPanel({ clientId, selectedSiteId, onSelect }: SitesPanelPro
     e.preventDefault();
     if (!name.trim() || protocolTypes.length === 0) return;
     const now = Date.now();
+    const siteName = name.trim();
     await save({
       id: newId(),
       clientId,
-      name: name.trim(),
+      name: siteName,
       address: address.trim(),
       coordinates: { lat: Number(lat) || 0, lng: Number(lng) || 0 },
       status,
@@ -55,6 +60,7 @@ export function SitesPanel({ clientId, selectedSiteId, onSelect }: SitesPanelPro
       createdAt: now,
       updatedAt: now,
     });
+    await logStructureChange("site", clientId, siteName, "created", changedBy);
     setName("");
     setAddress("");
     setLat("");
@@ -63,6 +69,11 @@ export function SitesPanel({ clientId, selectedSiteId, onSelect }: SitesPanelPro
     setNotes("");
     setProtocolTypes([]);
     setShowForm(false);
+  }
+
+  async function handleRemove(site: Site) {
+    await remove(site);
+    await logStructureChange("site", clientId, site.name, "deleted", changedBy);
   }
 
   return (
@@ -80,13 +91,15 @@ export function SitesPanel({ clientId, selectedSiteId, onSelect }: SitesPanelPro
               {site.status === "inactive" && <span className="status-badge pending">לא פעיל</span>}{" "}
               <span className="tag-list">{site.protocolTypes.map((t) => PROTOCOL_LABELS[t]).join(" · ")}</span>
             </button>
-            <button type="button" className="danger-link" onClick={() => remove(site)}>
+            <button type="button" className="danger-link" onClick={() => handleRemove(site)}>
               מחק
             </button>
           </li>
         ))}
         {sites.length === 0 && <li className="empty-hint">אין עדיין אתרים ללקוח זה</li>}
       </ul>
+
+      <StructureAuditLog entityType="site" scopeId={clientId} />
 
       {showForm ? (
         <form onSubmit={handleSubmit} className="inline-form stacked">

@@ -3,6 +3,13 @@
 import { useState } from "react";
 import type { CriticalDirection, ParameterConfig } from "@/lib/types";
 import { newId, useCollection } from "@/lib/rtdb-collection";
+import { useAuth } from "@/lib/auth-context";
+
+const CHANGE_ACTION_LABELS: Record<ParameterConfig["history"][number]["action"], string> = {
+  created: "נוצר",
+  activated: "הופעל מחדש",
+  deactivated: "הושבת",
+};
 
 const CRITICAL_LABELS: Record<CriticalDirection, string> = {
   none: "ללא סף קריטי",
@@ -43,6 +50,8 @@ const emptyDraft: ParameterDraft = {
 };
 
 export function ParametersPanel({ systemId }: ParametersPanelProps) {
+  const { appUser } = useAuth();
+  const changedBy = appUser?.username ?? "לא ידוע";
   const { items: allParameters, save } = useCollection<ParameterConfig>("parameterConfigs");
   const parameters = allParameters.filter((p) => p.systemId === systemId).sort((a, b) => a.order - b.order);
   const activeParameters = parameters.filter((p) => p.active);
@@ -69,6 +78,7 @@ export function ParametersPanel({ systemId }: ParametersPanelProps) {
       criticalDirection: draft.criticalDirection,
       criticalValue: draft.criticalDirection !== "none" && draft.criticalValue.trim() ? Number(draft.criticalValue) : null,
       criticalMessage: draft.criticalDirection !== "none" ? draft.criticalMessage.trim() : "",
+      history: [{ changedBy, changedAt: new Date().toISOString(), action: "created" }],
     });
     setDraft(emptyDraft);
     setShowForm(false);
@@ -78,7 +88,14 @@ export function ParametersPanel({ systemId }: ParametersPanelProps) {
   // (spec rule 9) — "delete" always just deactivates it instead. Historical
   // readings that reference it stay exactly as they were.
   async function setActive(param: ParameterConfig, active: boolean) {
-    await save({ ...param, active });
+    await save({
+      ...param,
+      active,
+      history: [
+        ...param.history,
+        { changedBy, changedAt: new Date().toISOString(), action: active ? "activated" : "deactivated" },
+      ],
+    });
   }
 
   function renderRow(param: ParameterConfig) {
@@ -103,6 +120,21 @@ export function ParametersPanel({ systemId }: ParametersPanelProps) {
           <button type="button" onClick={() => setActive(param, true)}>
             הפעל מחדש
           </button>
+        )}
+        {param.history.length > 0 && (
+          <details>
+            <summary>היסטוריית שינויים ({param.history.length})</summary>
+            <ul className="history-list">
+              {param.history
+                .slice()
+                .reverse()
+                .map((h, i) => (
+                  <li key={i}>
+                    {new Date(h.changedAt).toLocaleString("he-IL")} — {h.changedBy}: {CHANGE_ACTION_LABELS[h.action]}
+                  </li>
+                ))}
+            </ul>
+          </details>
         )}
       </li>
     );

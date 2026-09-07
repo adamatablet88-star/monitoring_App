@@ -4,6 +4,13 @@ import type { WellIdentity } from "./identity";
 export type SystemType = "SVE" | "bioVenting";
 export type CriticalDirection = "none" | "above" | "below";
 
+/** Audit Trail for a parameter (spec 18.8) — a ParameterConfig is never deleted, only deactivated, so its own history can live inline like FrequencySetting's. */
+export interface ParameterChangeRecord {
+  changedBy: string;
+  changedAt: string;
+  action: "created" | "activated" | "deactivated";
+}
+
 /**
  * Generic dynamic parameter configuration engine, shared by SVE and
  * Bio-venting systems. Each parameter can carry its own critical-threshold
@@ -41,6 +48,9 @@ export interface ParameterConfig {
   criticalDirection: CriticalDirection;
   criticalValue: number | null;
   criticalMessage: string;
+
+  /** Every change appended here — never overwritten silently (Audit Trail). */
+  history: ParameterChangeRecord[];
 }
 
 export interface TreatmentSystem {

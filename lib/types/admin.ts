@@ -54,3 +54,25 @@ export interface ScheduledSpecialTest {
   testType: SpecialTestType;
   frequency: SpecialTestFrequency;
 }
+
+/**
+ * Audit Trail for structural changes (spec 18.8) — creating or deleting a
+ * Well/TreatmentSystem/Site is otherwise invisible history: unlike a
+ * FrequencySetting (which is only ever updated, never removed, so its own
+ * `history` field is enough), a deleted well/system/site leaves no row of
+ * its own to attach a history to. Logged separately here instead.
+ */
+export type AuditEntityType = "well" | "treatmentSystem" | "site";
+export type AuditAction = "created" | "deleted";
+
+export interface StructureAuditEntry {
+  id: string;
+  entityType: AuditEntityType;
+  /** siteId for well/treatmentSystem, clientId for site — scopes the log to one admin screen. */
+  scopeId: string;
+  /** Snapshot of the entity's own label, since it may no longer exist. */
+  entityLabel: string;
+  action: AuditAction;
+  changedBy: string;
+  changedAt: string;
+}

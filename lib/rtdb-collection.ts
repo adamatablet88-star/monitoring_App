@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { onValue, ref, remove as removeRef, runTransaction, set } from "firebase/database";
 import { getFirebaseDb } from "./firebase";
+import type { AuditAction, AuditEntityType } from "./types";
 
 /**
  * Reactive CRUD over one Realtime Database collection path, the
@@ -52,6 +53,31 @@ export function useCollection<T extends { id: string }>(path: string) {
 
 export function newId(): string {
   return crypto.randomUUID();
+}
+
+/**
+ * Audit Trail for structural changes (spec 18.8) — a deleted well/system/
+ * site leaves no row of its own to hold a history, so create/delete events
+ * are logged to a separate top-level collection instead. See
+ * lib/types/admin.ts's StructureAuditEntry and components/admin/StructureAuditLog.tsx.
+ */
+export async function logStructureChange(
+  entityType: AuditEntityType,
+  scopeId: string,
+  entityLabel: string,
+  action: AuditAction,
+  changedBy: string,
+): Promise<void> {
+  const id = newId();
+  await set(ref(getFirebaseDb(), `structureAuditLog/${id}`), {
+    id,
+    entityType,
+    scopeId,
+    entityLabel,
+    action,
+    changedBy,
+    changedAt: new Date().toISOString(),
+  });
 }
 
 export class ConflictError extends Error {

@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { ref, update } from "firebase/database";
 import type { SystemType, TreatmentSystem } from "@/lib/types";
-import { newId, useCollection } from "@/lib/rtdb-collection";
+import { logStructureChange, newId, useCollection } from "@/lib/rtdb-collection";
+import { useAuth } from "@/lib/auth-context";
 import { getFirebaseDb } from "@/lib/firebase";
 import { defaultParametersFor } from "@/lib/defaultParameters";
+import { StructureAuditLog } from "./StructureAuditLog";
 
 const CFM_PATTERN = /^\d+\s*CFM$/i;
 
@@ -16,6 +18,8 @@ interface TreatmentSystemsPanelProps {
 }
 
 export function TreatmentSystemsPanel({ siteId, selectedSystemId, onSelect }: TreatmentSystemsPanelProps) {
+  const { appUser } = useAuth();
+  const changedBy = appUser?.username ?? "לא ידוע";
   const { items: allSystems, remove } = useCollection<TreatmentSystem>("treatmentSystems");
   const systems = allSystems.filter((s) => s.siteId === siteId);
 
@@ -29,16 +33,23 @@ export function TreatmentSystemsPanel({ siteId, selectedSystemId, onSelect }: Tr
     e.preventDefault();
     if (!labelValid) return;
     const id = newId();
-    const system: TreatmentSystem = { id, siteId, systemType, systemLabel: systemLabel.trim() };
+    const label = systemLabel.trim();
+    const system: TreatmentSystem = { id, siteId, systemType, systemLabel: label };
     // System + its suggested default parameters land together — a system
     // is never left momentarily without the readings its type always has.
     const writes: Record<string, unknown> = { [`treatmentSystems/${id}`]: system };
-    for (const param of defaultParametersFor(id, systemType)) {
+    for (const param of defaultParametersFor(id, systemType, changedBy)) {
       writes[`parameterConfigs/${param.id}`] = param;
     }
     await update(ref(getFirebaseDb()), writes);
+    await logStructureChange("treatmentSystem", siteId, `[${systemType}] ${label}`, "created", changedBy);
     setSystemLabel("");
     setShowForm(false);
+  }
+
+  async function handleRemove(system: TreatmentSystem) {
+    await remove(system);
+    await logStructureChange("treatmentSystem", siteId, `[${system.systemType}] ${system.systemLabel}`, "deleted", changedBy);
   }
 
   return (
@@ -54,13 +65,15 @@ export function TreatmentSystemsPanel({ siteId, selectedSystemId, onSelect }: Tr
             >
               [{system.systemType}] {system.systemLabel}
             </button>
-            <button type="button" className="danger-link" onClick={() => remove(system)}>
+            <button type="button" className="danger-link" onClick={() => handleRemove(system)}>
               מחק
             </button>
           </li>
         ))}
         {systems.length === 0 && <li className="empty-hint">אין עדיין מערכות טיפול באתר זה</li>}
       </ul>
+
+      <StructureAuditLog entityType="treatmentSystem" scopeId={siteId} />
 
       {showForm ? (
         <form onSubmit={handleSubmit} className="inline-form stacked">

@@ -26,6 +26,12 @@
     "regulatoryReports": { "$id": { ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin'" } },
     "scheduledSpecialTests": { "$id": { ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin'" } },
 
+    "structureAuditLog": {
+      "$id": {
+        ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' && !data.exists() && newData.exists()"
+      }
+    },
+
     "wells": {
       "$id": {
         ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || (data.exists() && newData.exists())"

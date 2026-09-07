@@ -25,6 +25,7 @@ export function defaultParametersFor(systemId: string, systemType: SystemType, c
     systemId,
     active: true,
     required: false,
+    monotonicIncreasing: false,
     criticalDirection: "none",
     criticalValue: null,
     criticalMessage: "",
@@ -112,6 +113,7 @@ export function defaultParametersFor(systemId: string, systemType: SystemType, c
         order: 7,
         helpText: "מצטבר, לא יכול לרדת מהקריאה הקודמת",
         invertSign: false,
+        monotonicIncreasing: true,
       },
     ];
   }

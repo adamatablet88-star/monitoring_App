@@ -82,7 +82,7 @@ export function ClientsPanel({ selectedClientId, onSelect }: ClientsPanelProps) 
 
   return (
     <section className="panel">
-      <h2>לקוחות (חברות דלק)</h2>
+      <h2>לקוחות</h2>
       <ul className="entity-list">
         {clients.map((client) => (
           <li key={client.id}>

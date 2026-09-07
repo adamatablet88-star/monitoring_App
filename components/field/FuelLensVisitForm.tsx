@@ -57,6 +57,7 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
   // Frozen at mount — what this form actually loaded, for conflict detection on save.
   const [baseUpdatedAt] = useState<number | null>(existingVisit?.updatedAt ?? null);
   const [conflictError, setConflictError] = useState<string | null>(null);
+  const [skimmerReasonError, setSkimmerReasonError] = useState(false);
 
   // Field-derived, not admin-set (see Well.recoveryMethod) — the technician
   // reports/updates it here every visit; it pre-fills from the well's last
@@ -123,6 +124,12 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
     e.preventDefault();
     if (notMeasuredFlag && !notMeasuredReason) return;
     if (!firebaseUser) return;
+    // שלב 2 (7.3) הוא חובה כשמוצג — לא ניתן לשמור בלי לבחור סיבה.
+    if (showAutoSuggestion && !skimmerAutoSuggestedReason) {
+      setSkimmerReasonError(true);
+      return;
+    }
+    setSkimmerReasonError(false);
     setConflictError(null);
 
     const visitDate = existingVisit?.visitDate ?? todayString();
@@ -265,54 +272,80 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
 
         {recoveryMethod === "passive_skimmer" && (
           <fieldset>
-            <legend>סקימר פאסיבי</legend>
-            <label>
-              מה נמצא בסקימר
-              <select
-                value={skimmerFound}
-                onChange={(e) => setSkimmerFound(e.target.value as typeof skimmerFound)}
-              >
-                <option value="">— בחר —</option>
-                {(Object.keys(SKIMMER_FOUND_LABELS) as Array<keyof typeof SKIMMER_FOUND_LABELS>).map((key) => (
-                  <option key={key} value={key}>
-                    {SKIMMER_FOUND_LABELS[key]}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <legend>סקימר פאסיבי — רצף בדיקה מחייב (7.3)</legend>
+
+            <div className="wizard-step">
+              <span className="step-label">שלב 1</span>
+              <label>
+                מה נמצא בסקימר
+                <select
+                  value={skimmerFound}
+                  onChange={(e) => {
+                    setSkimmerFound(e.target.value as typeof skimmerFound);
+                    setSkimmerReasonError(false);
+                  }}
+                  required
+                >
+                  <option value="">— בחר —</option>
+                  {(Object.keys(SKIMMER_FOUND_LABELS) as Array<keyof typeof SKIMMER_FOUND_LABELS>).map((key) => (
+                    <option key={key} value={key}>
+                      {SKIMMER_FOUND_LABELS[key]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
             {(skimmerFound === "fuel_only" || skimmerFound === "fuel_and_water") && (
-              <div className="field-row">
-                <label>
-                  כמות דלק
-                  <input type="number" step="any" value={skimmerFuelAmount} onChange={(e) => setSkimmerFuelAmount(e.target.value)} />
-                </label>
-                {skimmerFound === "fuel_and_water" && (
+              <div className="wizard-step">
+                <span className="step-label">שלב 2</span>
+                <div className="field-row">
                   <label>
-                    כמות מים
-                    <input type="number" step="any" value={skimmerWaterAmount} onChange={(e) => setSkimmerWaterAmount(e.target.value)} />
+                    כמות דלק
+                    <input type="number" step="any" value={skimmerFuelAmount} onChange={(e) => setSkimmerFuelAmount(e.target.value)} />
                   </label>
-                )}
+                  {skimmerFound === "fuel_and_water" && (
+                    <label>
+                      כמות מים
+                      <input type="number" step="any" value={skimmerWaterAmount} onChange={(e) => setSkimmerWaterAmount(e.target.value)} />
+                    </label>
+                  )}
+                </div>
               </div>
             )}
+
             {showAutoSuggestion && (
-              <div className="suggestion-box">
-                <p>עדשה קיימת והסקימר נמצא ריק — סיבה אפשרית:</p>
-                {(Object.keys(AUTO_SUGGESTED_REASON_LABELS) as Array<keyof typeof AUTO_SUGGESTED_REASON_LABELS>).map((key) => (
-                  <button
-                    type="button"
-                    key={key}
-                    className={skimmerAutoSuggestedReason === key ? "suggestion-chip selected" : "suggestion-chip"}
-                    onClick={() => setSkimmerAutoSuggestedReason(key)}
-                  >
-                    {AUTO_SUGGESTED_REASON_LABELS[key]}
-                  </button>
-                ))}
+              <div className="wizard-step">
+                <span className="step-label">שלב 2 — חובה</span>
+                <div className="suggestion-box">
+                  <p>עדשה קיימת והסקימר נמצא ריק — יש לבחור סיבה לפני שמירה:</p>
+                  {(Object.keys(AUTO_SUGGESTED_REASON_LABELS) as Array<keyof typeof AUTO_SUGGESTED_REASON_LABELS>).map((key) => (
+                    <button
+                      type="button"
+                      key={key}
+                      className={skimmerAutoSuggestedReason === key ? "suggestion-chip selected" : "suggestion-chip"}
+                      onClick={() => {
+                        setSkimmerAutoSuggestedReason(key);
+                        setSkimmerReasonError(false);
+                      }}
+                    >
+                      {AUTO_SUGGESTED_REASON_LABELS[key]}
+                    </button>
+                  ))}
+                  {skimmerReasonError && <p className="field-error">שדה חובה — יש לבחור סיבה לפני השמירה</p>}
+                </div>
               </div>
             )}
-            <label className="checkbox-label">
-              <input type="checkbox" checked={skimmerRecalibrated} onChange={(e) => setSkimmerRecalibrated(e.target.checked)} />
-              כויל מחדש
-            </label>
+
+            {skimmerFound && (
+              <div className="wizard-step">
+                <span className="step-label">שלב {showAutoSuggestion || skimmerFound !== "empty" ? 3 : 2}</span>
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={skimmerRecalibrated} onChange={(e) => setSkimmerRecalibrated(e.target.checked)} />
+                  כויל מחדש
+                </label>
+              </div>
+            )}
           </fieldset>
         )}
 

@@ -30,6 +30,7 @@ interface ParameterDraft {
   order: string;
   helpText: string;
   invertSign: boolean;
+  monotonicIncreasing: boolean;
   criticalDirection: CriticalDirection;
   criticalValue: string;
   criticalMessage: string;
@@ -44,6 +45,7 @@ const emptyDraft: ParameterDraft = {
   order: "0",
   helpText: "",
   invertSign: false,
+  monotonicIncreasing: false,
   criticalDirection: "none",
   criticalValue: "",
   criticalMessage: "",
@@ -75,6 +77,7 @@ export function ParametersPanel({ systemId }: ParametersPanelProps) {
       helpText: draft.helpText.trim(),
       active: true,
       invertSign: draft.invertSign,
+      monotonicIncreasing: draft.monotonicIncreasing,
       criticalDirection: draft.criticalDirection,
       criticalValue: draft.criticalDirection !== "none" && draft.criticalValue.trim() ? Number(draft.criticalValue) : null,
       criticalMessage: draft.criticalDirection !== "none" ? draft.criticalMessage.trim() : "",
@@ -108,6 +111,7 @@ export function ParametersPanel({ systemId }: ParametersPanelProps) {
             : ""}
           {param.required && " · חובה"}
           {param.invertSign && " · וואקום (סימן הפוך)"}
+          {param.monotonicIncreasing && " · מצטבר (לא יכול לרדת)"}
           {param.criticalDirection !== "none" &&
             ` · סף קריטי: ${CRITICAL_LABELS[param.criticalDirection]} ${param.criticalValue ?? ""}`}
           {param.helpText && <span className="hint"> — {param.helpText}</span>}
@@ -207,6 +211,14 @@ export function ParametersPanel({ systemId }: ParametersPanelProps) {
                 onChange={(e) => setDraft((d) => ({ ...d, invertSign: e.target.checked }))}
               />
               שדה וואקום (טכנאי מזין ערך חיובי, נשמר כשלילי)
+            </label>
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={draft.monotonicIncreasing}
+                onChange={(e) => setDraft((d) => ({ ...d, monotonicIncreasing: e.target.checked }))}
+              />
+              מצטבר (לא יכול לרדת מהקריאה הקודמת)
             </label>
             <label>
               סדר תצוגה

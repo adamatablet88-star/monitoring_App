@@ -71,6 +71,8 @@ export interface FuelLensVisit {
 export interface ParameterReading {
   parameterId: string;
   value: number;
+  /** Technician's explanation — required in practice when a monotonicIncreasing parameter drops. */
+  note?: string;
 }
 
 // ---------------------------------------------------------------------------

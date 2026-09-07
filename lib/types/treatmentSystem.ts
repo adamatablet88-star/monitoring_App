@@ -44,6 +44,15 @@ export interface ParameterConfig {
    * parameters are "vacuum" now varies by what an admin has configured.
    */
   invertSign: boolean;
+  /**
+   * True for cumulative readings that should never decrease from the
+   * previous visit (e.g. SVE operating hours) — generalizes that one
+   * spec rule into a flag any admin-configured parameter can opt into,
+   * the same way invertSign generalized the vacuum-sign convention.
+   * ExtraParametersFields warns and opens an explanation note when a
+   * typed value is lower than the last recorded one.
+   */
+  monotonicIncreasing: boolean;
 
   criticalDirection: CriticalDirection;
   criticalValue: number | null;

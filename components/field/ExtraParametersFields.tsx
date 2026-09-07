@@ -59,7 +59,26 @@ export function ExtraParametersFields({ systemId, readings, onChange, pastVisits
     }
     const typed = Number(raw);
     const stored = param.invertSign ? -Math.abs(typed) : typed;
-    onChange([...rest, { parameterId: param.id, value: stored }]);
+    const note = readings.find((r) => r.parameterId === param.id)?.note;
+    onChange([...rest, { parameterId: param.id, value: stored, note }]);
+  }
+
+  function setNote(param: ParameterConfig, note: string) {
+    const current = readings.find((r) => r.parameterId === param.id);
+    if (!current) return;
+    const rest = readings.filter((r) => r.parameterId !== param.id);
+    onChange([...rest, { ...current, note: note.trim() || undefined }]);
+  }
+
+  /** Most recent past visit that actually carried a reading for this parameter — not just the most recent visit. */
+  function previousValueFor(param: ParameterConfig): number | null {
+    if (!pastVisits) return null;
+    const withReading = pastVisits
+      .filter((v) => v.extraReadings.some((r) => r.parameterId === param.id))
+      .sort((a, b) => (a.visitDate < b.visitDate ? 1 : -1));
+    if (withReading.length === 0) return null;
+    const raw = withReading[0].extraReadings.find((r) => r.parameterId === param.id)!.value;
+    return param.invertSign ? Math.abs(raw) : raw;
   }
 
   return (
@@ -72,6 +91,14 @@ export function ExtraParametersFields({ systemId, readings, onChange, pastVisits
           stored !== null &&
           ((param.minValue !== null && stored < param.minValue) || (param.maxValue !== null && stored > param.maxValue));
         const critical = isCriticalTriggered(stored, param);
+        // Both compared in display-space (sign-flipped back to positive for
+        // invertSign parameters) — stored is in storage-space and would
+        // otherwise be compared against the wrong sign for a hypothetical
+        // parameter that's both invertSign and monotonicIncreasing.
+        const currentDisplay = stored !== null ? (param.invertSign ? Math.abs(stored) : stored) : null;
+        const previousValue = param.monotonicIncreasing ? previousValueFor(param) : null;
+        const decreased = previousValue !== null && currentDisplay !== null && currentDisplay < previousValue;
+        const currentNote = readings.find((r) => r.parameterId === param.id)?.note ?? "";
         const history = pastVisits
           ? computeFieldHistory(
               pastVisits,
@@ -104,6 +131,12 @@ export function ExtraParametersFields({ systemId, readings, onChange, pastVisits
             )}
             <FieldHistoryHint stats={history} enabled={pastVisits !== undefined} />
             {critical && <CriticalBanner message={param.criticalMessage} />}
+            {decreased && (
+              <div className="field-warning">
+                <p>הערך ירד לעומת הקריאה הקודמת ({previousValue}) — מד זה אמור להיות מצטבר. נא להסביר:</p>
+                <input value={currentNote} onChange={(e) => setNote(param, e.target.value)} placeholder="הסבר לירידה" />
+              </div>
+            )}
           </div>
         );
       })}

@@ -27,6 +27,11 @@ function totalLiters(visit: FuelLensVisit): number {
   return visit.evacuations.reduce((sum, e) => sum + e.liters, 0);
 }
 
+/** A missing measurement is shown as "-", never as a blank cell. */
+function cellOrDash(value: number | null): number | string {
+  return value === null ? "-" : value;
+}
+
 /**
  * Builds the quarterly regulatory-report workbook: a structured Excel
  * export (not an automated combined document), so the hand-written
@@ -94,15 +99,15 @@ export async function buildFuelLensWorkbook(params: {
     const litersByMethod = Object.fromEntries(
       (Object.keys(EVACUATION_METHOD_LABELS) as EvacuationMethod[]).map((m) => [
         m,
-        visit.evacuations.filter((e) => e.method === m).reduce((sum, e) => sum + e.liters, 0) || null,
+        cellOrDash(visit.evacuations.filter((e) => e.method === m).reduce((sum, e) => sum + e.liters, 0) || null),
       ]),
     );
     const row = quarterlySheet.addRow({
       code: wellById.get(visit.wellId)?.code ?? visit.wellId,
       visitDate: visit.visitDate,
-      waterDepth: visit.waterDepth,
-      productDepth: visit.productDepth,
-      lensThickness: visit.lensThickness,
+      waterDepth: cellOrDash(visit.waterDepth),
+      productDepth: cellOrDash(visit.productDepth),
+      lensThickness: cellOrDash(visit.lensThickness),
       ...litersByMethod,
     });
     // עובי עדשה מודגש מעל 0.5 מ'.
@@ -170,9 +175,9 @@ export async function buildFuelLensWorkbook(params: {
     const row = historySheet.addRow({
       code: wellById.get(visit.wellId)?.code ?? visit.wellId,
       visitDate: visit.visitDate,
-      waterDepth: visit.waterDepth,
-      productDepth: visit.productDepth,
-      lensThickness: visit.lensThickness,
+      waterDepth: cellOrDash(visit.waterDepth),
+      productDepth: cellOrDash(visit.productDepth),
+      lensThickness: cellOrDash(visit.lensThickness),
       totalLiters: totalLiters(visit),
     });
     if (visit.lensThickness !== null && visit.lensThickness > 0.5) {

@@ -36,6 +36,7 @@ const AUTO_SUGGESTED_REASON_LABELS = {
 interface EvacuationDraft {
   method: EvacuationMethod;
   liters: string;
+  notes: string;
 }
 
 function todayString(): string {
@@ -86,6 +87,10 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
 
   const [absorbentCondition, setAbsorbentCondition] = useState(existingVisit?.absorbentCheck?.condition ?? "");
   const [absorbentReplaced, setAbsorbentReplaced] = useState(existingVisit?.absorbentCheck?.replaced ?? false);
+  const [absorbentReplacedDate, setAbsorbentReplacedDate] = useState(existingVisit?.absorbentCheck?.replacedDate ?? "");
+  const [absorbentReplacedReason, setAbsorbentReplacedReason] = useState(
+    existingVisit?.absorbentCheck?.replacedReason ?? "",
+  );
 
   const [tankCurrentVolume, setTankCurrentVolume] = useState(existingVisit?.tankReading?.currentVolume?.toString() ?? "");
   const [tankEmptiedSincePrevious, setTankEmptiedSincePrevious] = useState(
@@ -93,7 +98,7 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
   );
 
   const [evacuations, setEvacuations] = useState<EvacuationDraft[]>(
-    existingVisit?.evacuations.map((e) => ({ method: e.method, liters: String(e.liters) })) ?? [],
+    existingVisit?.evacuations.map((e) => ({ method: e.method, liters: String(e.liters), notes: e.notes ?? "" })) ?? [],
   );
 
   const waterDepthNum = waterDepth.trim() ? Number(waterDepth) : null;
@@ -105,7 +110,7 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
     recoveryMethod === "passive_skimmer" && skimmerFound === "empty" && lensThickness !== null && lensThickness > 0;
 
   function addEvacuation() {
-    setEvacuations((prev) => [...prev, { method: "skimmer", liters: "" }]);
+    setEvacuations((prev) => [...prev, { method: "skimmer", liters: "", notes: "" }]);
   }
   function updateEvacuation(index: number, patch: Partial<EvacuationDraft>) {
     setEvacuations((prev) => prev.map((e, i) => (i === index ? { ...e, ...patch } : e)));
@@ -140,7 +145,9 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
       lensThickness,
       notMeasured: { flag: notMeasuredFlag, reason: notMeasuredFlag ? (notMeasuredReason as NotMeasuredReason) : null },
       wellBottomDepth: wellBottomDepth.trim() ? Number(wellBottomDepth) : undefined,
-      evacuations: evacuations.filter((ev) => ev.liters.trim()).map((ev) => ({ method: ev.method, liters: Number(ev.liters) })),
+      evacuations: evacuations
+        .filter((ev) => ev.liters.trim())
+        .map((ev) => ({ method: ev.method, liters: Number(ev.liters), notes: ev.notes.trim() || undefined })),
     };
 
     if (recoveryMethod === "passive_skimmer" && skimmerFound) {
@@ -153,7 +160,12 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
       };
     }
     if (recoveryMethod === "absorbent") {
-      payload.absorbentCheck = { condition: absorbentCondition.trim(), replaced: absorbentReplaced };
+      payload.absorbentCheck = {
+        condition: absorbentCondition.trim(),
+        replaced: absorbentReplaced,
+        replacedDate: absorbentReplaced && absorbentReplacedDate.trim() ? absorbentReplacedDate : undefined,
+        replacedReason: absorbentReplaced && absorbentReplacedReason.trim() ? absorbentReplacedReason.trim() : undefined,
+      };
     }
     if (recoveryMethod === "active_skimmer") {
       payload.tankReading = {
@@ -315,6 +327,18 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
               <input type="checkbox" checked={absorbentReplaced} onChange={(e) => setAbsorbentReplaced(e.target.checked)} />
               הוחלף
             </label>
+            {absorbentReplaced && (
+              <div className="field-row">
+                <label>
+                  תאריך החלפה
+                  <input type="date" value={absorbentReplacedDate} onChange={(e) => setAbsorbentReplacedDate(e.target.value)} />
+                </label>
+                <label>
+                  סיבת החלפה
+                  <input value={absorbentReplacedReason} onChange={(e) => setAbsorbentReplacedReason(e.target.value)} />
+                </label>
+              </div>
+            )}
           </fieldset>
         )}
 
@@ -353,6 +377,10 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
               <label>
                 כמות (ליטר)
                 <input type="number" step="any" value={ev.liters} onChange={(e) => updateEvacuation(index, { liters: e.target.value })} />
+              </label>
+              <label>
+                הערות
+                <input value={ev.notes} onChange={(e) => updateEvacuation(index, { notes: e.target.value })} />
               </label>
               <button type="button" className="danger-link" onClick={() => removeEvacuation(index)}>
                 הסר

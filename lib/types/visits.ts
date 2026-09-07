@@ -44,10 +44,16 @@ export interface FuelLensVisit {
     autoSuggestedReason?: "not_calibrated" | "level_below_skimmer";
     recalibrated: boolean;
   };
-  absorbentCheck?: { condition: string; replaced: boolean };
+  absorbentCheck?: {
+    condition: string;
+    replaced: boolean;
+    /** Only meaningful when replaced is true. */
+    replacedDate?: string;
+    replacedReason?: string;
+  };
 
   /** Zero, one, or more evacuation actions per visit. */
-  evacuations: Array<{ method: EvacuationMethod; liters: number }>;
+  evacuations: Array<{ method: EvacuationMethod; liters: number; notes?: string }>;
 
   /** Only for active-skimmer wells; tracked at the shared Tank level. */
   tankReading?: {

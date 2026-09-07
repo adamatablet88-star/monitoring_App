@@ -11,6 +11,8 @@ export interface WellIdentity {
   x: number;
   y: number;
   z: number;
+  /** TOC — נקודת ייחוס קבועה למדידת עומק (Top Of Casing), נפרדת מ-Z (רום הקרקע). */
+  toc: number;
   manhole: {
     material: "concrete" | "iron";
     size: string;

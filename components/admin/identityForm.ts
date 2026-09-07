@@ -12,6 +12,7 @@ export interface IdentityDraft {
   x: string;
   y: string;
   z: string;
+  toc: string;
   manholeMaterial: "concrete" | "iron";
   manholeSize: string;
   wellDepth: string;
@@ -25,6 +26,7 @@ export const emptyIdentityDraft: IdentityDraft = {
   x: "",
   y: "",
   z: "",
+  toc: "",
   manholeMaterial: "concrete",
   manholeSize: "",
   wellDepth: "",
@@ -39,6 +41,7 @@ export function identityToDraft(entity: WellIdentity): IdentityDraft {
     x: String(entity.x),
     y: String(entity.y),
     z: String(entity.z),
+    toc: String(entity.toc),
     manholeMaterial: entity.manhole.material,
     manholeSize: entity.manhole.size,
     wellDepth: String(entity.wellDepth),
@@ -54,6 +57,7 @@ export function draftToIdentity(draft: IdentityDraft): Omit<WellIdentity, "id"> 
     x: Number(draft.x),
     y: Number(draft.y),
     z: Number(draft.z),
+    toc: Number(draft.toc),
     manhole: { material: draft.manholeMaterial, size: draft.manholeSize.trim() },
     wellDepth: Number(draft.wellDepth),
     wellDiameter: Number(draft.wellDiameter),
@@ -65,7 +69,7 @@ export function isIdentityDraftValid(draft: IdentityDraft): boolean {
   return (
     draft.code.trim().length > 0 &&
     draft.manholeSize.trim().length > 0 &&
-    [draft.x, draft.y, draft.z, draft.wellDepth, draft.wellDiameter, draft.screenFrom, draft.screenTo].every(
+    [draft.x, draft.y, draft.z, draft.toc, draft.wellDepth, draft.wellDiameter, draft.screenFrom, draft.screenTo].every(
       (v) => v.trim().length > 0 && !Number.isNaN(Number(v)),
     )
   );

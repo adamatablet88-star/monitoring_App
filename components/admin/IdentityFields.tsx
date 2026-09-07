@@ -32,6 +32,10 @@ export function IdentityFields({ draft, onChange }: IdentityFieldsProps) {
           Z (גובה/רום)
           <input type="number" step="any" value={draft.z} onChange={(e) => onChange({ z: e.target.value })} required />
         </label>
+        <label>
+          TOC (נקודת ייחוס למדידה)
+          <input type="number" step="any" value={draft.toc} onChange={(e) => onChange({ toc: e.target.value })} required />
+        </label>
       </div>
 
       <div className="field-row">

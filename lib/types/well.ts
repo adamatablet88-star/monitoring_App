@@ -6,6 +6,13 @@ export type RecoveryMethod = "none" | "passive_skimmer" | "absorbent" | "active_
 /** A fuel-lens monitoring well, standalone (not under a treatment system). */
 export interface Well extends WellIdentity {
   siteId: string;
+  /**
+   * Field-derived, not admin-set: the technician reports/updates this on
+   * every fuel-lens visit (see FuelLensVisit.recoveryMethod), and the form
+   * writes the latest value back here as a cache for admin screens/exports
+   * that need "current recovery method" without scanning every visit.
+   * New wells start at "none" until the first visit is logged.
+   */
   recoveryMethod: RecoveryMethod;
   /** Only meaningful when recoveryMethod === "active_skimmer". */
   tankId?: string;

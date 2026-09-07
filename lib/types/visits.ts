@@ -1,3 +1,5 @@
+import type { RecoveryMethod } from "./well";
+
 /** Ported from field-monitoring-app/packages/shared/src/visits.ts. */
 export type NotMeasuredReason = "valve_closed" | "access_blocked" | "equipment_fault" | "other";
 export type EvacuationMethod = "skimmer" | "bailer" | "external_pump" | "other";
@@ -20,6 +22,13 @@ export interface FuelLensVisit {
   createdAt: number;
   /** Bumped on every save; used for optimistic-concurrency conflict detection — see lib/rtdb-collection.ts's saveWithConflictCheck. */
   updatedAt: number;
+  /**
+   * Field-derived, reported by the technician each visit (not admin-set —
+   * see Well.recoveryMethod). Determines which sub-form below applies.
+   */
+  recoveryMethod: RecoveryMethod;
+  /** Only meaningful when recoveryMethod === "active_skimmer". */
+  tankId?: string;
   waterDepth: number | null;
   productDepth: number | null;
   /** Computed live: waterDepth - productDepth. */
@@ -88,28 +97,34 @@ export interface SveSystemVisit {
   /** Fault is a UI flag only — no active alert channel to the admin yet. */
   startupAttempt?: { succeeded: boolean; faultFlagged: boolean };
 
-  operatingHours?: number;
+  /** 3-point catalyst bed temperature profile — distinct from the catalytic converter's own inlet reading (see extraReadings). Not part of the spec's suggested flexible-parameter list, so it stays fixed. */
   catalystTemp?: { inlet: number; internal: number; outlet: number };
 
   /** "All unchanged" pre-fills from the previous visit; technician edits only what changed. */
   manifold: Array<{ treatmentWellId: string; openPercent: number }>;
 
-  vacuumOverall: number;
   flowOverall: number;
-  vacuumMoistureSeparator: number;
 
-  /** 1 = atmosphere only, 5 = wells only. */
-  vcv: 1 | 2 | 3 | 4 | 5;
-  catalyticConverterInlet?: { pressure: number; temp: number };
-
-  pidBeforeConverter: number;
-  /** Validated against the generic critical-threshold mechanism (default: above 50). */
-  pidAfterConverter: number;
+  /**
+   * Computed from the pidBeforeConverter/pidAfterConverter readings in
+   * extraReadings (see components/admin/defaultParameters.ts's seeded
+   * parameter keys) — still stored directly so the trends dashboard and
+   * Excel export don't need to join against ParameterConfig just to show
+   * a number that was already known at save time.
+   */
   efficiencyPercent: number;
 
   to15?: { done: boolean; date: string; canisterNumber: string; sampleTime: string };
 
-  /** Extra admin-configured parameters beyond the fixed fields above. */
+  /**
+   * Vacuum-manifold, moisture-separator, VCV, catalytic-converter-inlet
+   * pressure, PID before/after, and operating hours all live here now —
+   * seeded as default ParameterConfig rows per system (spec 5.4), not
+   * hardcoded fields, so an admin can edit/deactivate/add to them freely.
+   * This is also why SVE has no "has a catalytic converter?" toggle
+   * anymore: the converter's readings are just parameters like any other,
+   * always shown, never hidden behind a switch.
+   */
   extraReadings: ParameterReading[];
 
   /** Only populated when visitType is "large" or "baseline". */
@@ -148,7 +163,6 @@ export interface BioVentingSystemVisit {
   /** "recommend_replace" raises an admin-facing flag, display-only, like SVE's fault flag. */
   filterStatus: "checked_ok" | "cleaned_now" | "recommend_replace";
 
-  vacuumIntakeLine: number;
   flowOverall: number;
   pressureOverall: number;
 
@@ -156,8 +170,13 @@ export interface BioVentingSystemVisit {
   /** Equivalent of SVE's VCV, but expressed as a percentage. */
   dilutionValvePercent: number;
 
-  annualOxygenTest?: { done: boolean; date: string };
+  annualOxygenTest?: { done: boolean; date: string; note?: string };
 
+  /**
+   * vacuumIntakeLine (and this system's O2/CO2 exhaust readings — distinct
+   * from the per-monitoring-point, per-depth O2/CO2 below) live here as
+   * seeded default parameters, not fixed fields — see lib/defaultParameters.ts.
+   */
   extraReadings: ParameterReading[];
   monitoringPoints: MonitoringPointReading[];
 }

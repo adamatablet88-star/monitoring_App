@@ -22,57 +22,87 @@ interface ExtraParametersFieldsProps {
 }
 
 /**
- * Renders every admin-configured ParameterConfig for this system beyond
- * the visit form's fixed fields — the "add a gauge with no code change"
- * extensibility hatch, soft-warning range hint included, critical-threshold
- * banner included, 6-month historical context included.
+ * Renders every admin-configured, active ParameterConfig for this system —
+ * the "add a gauge with no code change" extensibility hatch. Handles the
+ * soft-warning range hint, the generic critical-threshold banner, the
+ * generic vacuum sign-flip (invertSign: technician always types a positive
+ * magnitude, the stored value is negated), and the 6-month historical
+ * context. This is also where SVE's fixed vacuum/PID/catalytic-converter
+ * fields and Bio-venting's vacuumIntakeLine now live — the spec's
+ * suggested defaults, seeded per system, rather than hardcoded form fields.
  */
 export function ExtraParametersFields({ systemId, readings, onChange, pastVisits }: ExtraParametersFieldsProps) {
   const { items: allParameters } = useCollection<ParameterConfig>("parameterConfigs");
-  const parameters = allParameters.filter((p) => p.systemId === systemId).sort((a, b) => a.order - b.order);
+  const parameters = allParameters
+    .filter((p) => p.systemId === systemId && p.active)
+    .sort((a, b) => a.order - b.order);
 
   if (parameters.length === 0) return null;
 
-  function valueFor(parameterId: string): string {
+  function storedValueFor(parameterId: string): number | null {
     const reading = readings.find((r) => r.parameterId === parameterId);
-    return reading ? String(reading.value) : "";
+    return reading ? reading.value : null;
   }
 
-  function setValue(parameterId: string, raw: string) {
-    const rest = readings.filter((r) => r.parameterId !== parameterId);
-    onChange(raw.trim() ? [...rest, { parameterId, value: Number(raw) }] : rest);
+  /** What the technician sees/types — sign-flipped back to positive for invertSign parameters. */
+  function displayValueFor(param: ParameterConfig): string {
+    const stored = storedValueFor(param.id);
+    if (stored === null) return "";
+    return String(param.invertSign ? Math.abs(stored) : stored);
+  }
+
+  function setValue(param: ParameterConfig, raw: string) {
+    const rest = readings.filter((r) => r.parameterId !== param.id);
+    if (!raw.trim()) {
+      onChange(rest);
+      return;
+    }
+    const typed = Number(raw);
+    const stored = param.invertSign ? -Math.abs(typed) : typed;
+    onChange([...rest, { parameterId: param.id, value: stored }]);
   }
 
   return (
     <fieldset>
       <legend>פרמטרים נוספים</legend>
       {parameters.map((param) => {
-        const raw = valueFor(param.id);
-        const numValue = raw.trim() ? Number(raw) : null;
+        const stored = storedValueFor(param.id);
+        const display = displayValueFor(param);
         const outOfRange =
-          numValue !== null &&
-          ((param.minValue !== null && numValue < param.minValue) || (param.maxValue !== null && numValue > param.maxValue));
-        const critical = isCriticalTriggered(numValue, param);
+          stored !== null &&
+          ((param.minValue !== null && stored < param.minValue) || (param.maxValue !== null && stored > param.maxValue));
+        const critical = isCriticalTriggered(stored, param);
         const history = pastVisits
           ? computeFieldHistory(
               pastVisits,
               (v) => v.visitDate,
-              (v) => v.extraReadings.find((r) => r.parameterId === param.id)?.value,
+              (v) => {
+                const value = v.extraReadings.find((r) => r.parameterId === param.id)?.value;
+                if (value === undefined) return undefined;
+                return param.invertSign ? Math.abs(value) : value;
+              },
             )
           : null;
         return (
           <div key={param.id} className="parameter-reading-row">
             <label>
               {param.label} {param.unit && `(${param.unit})`}
-              <input type="number" step="any" value={raw} onChange={(e) => setValue(param.id, e.target.value)} />
+              <input
+                type="number"
+                step="any"
+                value={display}
+                onChange={(e) => setValue(param, e.target.value)}
+                title={param.helpText || undefined}
+              />
             </label>
+            {param.helpText && <span className="hint">{param.helpText}</span>}
             {(param.minValue !== null || param.maxValue !== null) && (
               <span className="hint">
                 טווח תקין: {param.minValue ?? "—"}–{param.maxValue ?? "—"}
                 {outOfRange ? " (חריגה מהטווח)" : ""}
               </span>
             )}
-            <FieldHistoryHint stats={history} />
+            <FieldHistoryHint stats={history} enabled={pastVisits !== undefined} />
             {critical && <CriticalBanner message={param.criticalMessage} />}
           </div>
         );

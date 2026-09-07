@@ -1,8 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { ref, update } from "firebase/database";
 import type { SystemType, TreatmentSystem } from "@/lib/types";
 import { newId, useCollection } from "@/lib/rtdb-collection";
+import { getFirebaseDb } from "@/lib/firebase";
+import { defaultParametersFor } from "@/lib/defaultParameters";
 
 const CFM_PATTERN = /^\d+\s*CFM$/i;
 
@@ -13,7 +16,7 @@ interface TreatmentSystemsPanelProps {
 }
 
 export function TreatmentSystemsPanel({ siteId, selectedSystemId, onSelect }: TreatmentSystemsPanelProps) {
-  const { items: allSystems, save, remove } = useCollection<TreatmentSystem>("treatmentSystems");
+  const { items: allSystems, remove } = useCollection<TreatmentSystem>("treatmentSystems");
   const systems = allSystems.filter((s) => s.siteId === siteId);
 
   const [showForm, setShowForm] = useState(false);
@@ -25,7 +28,15 @@ export function TreatmentSystemsPanel({ siteId, selectedSystemId, onSelect }: Tr
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!labelValid) return;
-    await save({ id: newId(), siteId, systemType, systemLabel: systemLabel.trim() });
+    const id = newId();
+    const system: TreatmentSystem = { id, siteId, systemType, systemLabel: systemLabel.trim() };
+    // System + its suggested default parameters land together — a system
+    // is never left momentarily without the readings its type always has.
+    const writes: Record<string, unknown> = { [`treatmentSystems/${id}`]: system };
+    for (const param of defaultParametersFor(id, systemType)) {
+      writes[`parameterConfigs/${param.id}`] = param;
+    }
+    await update(ref(getFirebaseDb()), writes);
     setSystemLabel("");
     setShowForm(false);
   }
@@ -66,12 +77,17 @@ export function TreatmentSystemsPanel({ siteId, selectedSystemId, onSelect }: Tr
               <option value="bioVenting">Bio-venting</option>
             </select>
           </label>
+          <p className="hint">
+            {systemType === "SVE"
+              ? "מערכת SVE כוללת תמיד ממיר קטליטי (קבוע)."
+              : "מערכת Bio-venting אינה כוללת ממיר קטליטי."}
+          </p>
           <label>
             {systemType === "SVE" ? "גודל מערכת" : "שם מערכת"}
             <input
               value={systemLabel}
               onChange={(e) => setSystemLabel(e.target.value)}
-              placeholder={systemType === "SVE" ? "300 CFM" : "מערכת המלאכה"}
+              placeholder={systemType === "SVE" ? "גודל מערכת, למשל \"300 CFM\"" : "שם המערכת, למשל \"מערכת המלאכה\""}
               required
             />
           </label>

@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import type { EvacuationMethod, FuelLensVisit, NotMeasuredReason, Tank, Well } from "@/lib/types";
+import { ref, update } from "firebase/database";
+import type { EvacuationMethod, FuelLensVisit, NotMeasuredReason, RecoveryMethod, Tank, Well } from "@/lib/types";
 import { ConflictError, saveWithConflictCheck, useCollection } from "@/lib/rtdb-collection";
 import { useAuth } from "@/lib/auth-context";
+import { getFirebaseDb } from "@/lib/firebase";
 import { NOT_MEASURED_REASON_LABELS } from "./labels";
 
 const EVACUATION_METHOD_LABELS: Record<EvacuationMethod, string> = {
@@ -11,6 +13,13 @@ const EVACUATION_METHOD_LABELS: Record<EvacuationMethod, string> = {
   bailer: "ביילר",
   external_pump: "משאבה חיצונית",
   other: "אחר",
+};
+
+const RECOVERY_LABELS: Record<RecoveryMethod, string> = {
+  none: "ללא אמצעי",
+  passive_skimmer: "סקימר פאסיבי",
+  absorbent: "סופח",
+  active_skimmer: "סקימר אקטיבי",
 };
 
 const SKIMMER_FOUND_LABELS = {
@@ -41,12 +50,19 @@ interface FuelLensVisitFormProps {
 
 export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisitFormProps) {
   const { firebaseUser } = useAuth();
-  const { items: tanks } = useCollection<Tank>("tanks");
-  const tank = well.tankId ? tanks.find((t) => t.id === well.tankId) : null;
+  const { items: allTanks } = useCollection<Tank>("tanks");
+  const tanks = allTanks.filter((t) => t.siteId === well.siteId);
 
   // Frozen at mount — what this form actually loaded, for conflict detection on save.
   const [baseUpdatedAt] = useState<number | null>(existingVisit?.updatedAt ?? null);
   const [conflictError, setConflictError] = useState<string | null>(null);
+
+  // Field-derived, not admin-set (see Well.recoveryMethod) — the technician
+  // reports/updates it here every visit; it pre-fills from the well's last
+  // reported value and determines which sub-form below applies.
+  const [recoveryMethod, setRecoveryMethod] = useState<RecoveryMethod>(existingVisit?.recoveryMethod ?? well.recoveryMethod);
+  const [tankId, setTankId] = useState<string>(existingVisit?.tankId ?? well.tankId ?? "");
+  const tank = tankId ? tanks.find((t) => t.id === tankId) : null;
 
   const [notMeasuredFlag, setNotMeasuredFlag] = useState(existingVisit?.notMeasured.flag ?? false);
   const [notMeasuredReason, setNotMeasuredReason] = useState<NotMeasuredReason | "">(
@@ -86,7 +102,7 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
     !notMeasuredFlag && waterDepthNum !== null && productDepthNum !== null ? waterDepthNum - productDepthNum : null;
 
   const showAutoSuggestion =
-    well.recoveryMethod === "passive_skimmer" && skimmerFound === "empty" && lensThickness !== null && lensThickness > 0;
+    recoveryMethod === "passive_skimmer" && skimmerFound === "empty" && lensThickness !== null && lensThickness > 0;
 
   function addEvacuation() {
     setEvacuations((prev) => [...prev, { method: "skimmer", liters: "" }]);
@@ -117,6 +133,8 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
       createdBy: existingVisit?.createdBy ?? firebaseUser.uid,
       createdAt: existingVisit?.createdAt ?? Date.now(),
       updatedAt: Date.now(),
+      recoveryMethod,
+      tankId: recoveryMethod === "active_skimmer" && tankId ? tankId : undefined,
       waterDepth: notMeasuredFlag ? null : waterDepthNum,
       productDepth: notMeasuredFlag ? null : productDepthNum,
       lensThickness,
@@ -125,7 +143,7 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
       evacuations: evacuations.filter((ev) => ev.liters.trim()).map((ev) => ({ method: ev.method, liters: Number(ev.liters) })),
     };
 
-    if (well.recoveryMethod === "passive_skimmer" && skimmerFound) {
+    if (recoveryMethod === "passive_skimmer" && skimmerFound) {
       payload.skimmerCheck = {
         found: skimmerFound,
         fuelAmount: skimmerFuelAmount.trim() ? Number(skimmerFuelAmount) : undefined,
@@ -134,10 +152,10 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
         recalibrated: skimmerRecalibrated,
       };
     }
-    if (well.recoveryMethod === "absorbent") {
+    if (recoveryMethod === "absorbent") {
       payload.absorbentCheck = { condition: absorbentCondition.trim(), replaced: absorbentReplaced };
     }
-    if (well.recoveryMethod === "active_skimmer") {
+    if (recoveryMethod === "active_skimmer") {
       payload.tankReading = {
         currentVolume: tankCurrentVolume.trim() ? Number(tankCurrentVolume) : 0,
         emptiedSincePrevious: tankEmptiedSincePrevious,
@@ -146,6 +164,14 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
 
     try {
       await saveWithConflictCheck("fuelLensVisits", payload, baseUpdatedAt);
+      // Cache the latest reported method/tank on the well itself, for admin
+      // screens/exports that need "current recovery method" without
+      // scanning every visit. Not conflict-checked: it's a derived cache,
+      // always safe to overwrite with the most recently saved visit's value.
+      await update(ref(getFirebaseDb()), {
+        [`wells/${well.id}/recoveryMethod`]: recoveryMethod,
+        [`wells/${well.id}/tankId`]: recoveryMethod === "active_skimmer" && tankId ? tankId : null,
+      });
       onDone();
     } catch (err) {
       if (err instanceof ConflictError) {
@@ -164,6 +190,30 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
       <h2>ביקור — {well.code}</h2>
 
       <form onSubmit={handleSubmit} className="inline-form stacked">
+        <label>
+          אמצעי פינוי נוכחי
+          <select value={recoveryMethod} onChange={(e) => setRecoveryMethod(e.target.value as RecoveryMethod)}>
+            {(Object.keys(RECOVERY_LABELS) as RecoveryMethod[]).map((method) => (
+              <option key={method} value={method}>
+                {RECOVERY_LABELS[method]}
+              </option>
+            ))}
+          </select>
+        </label>
+        {recoveryMethod === "active_skimmer" && (
+          <label>
+            מיכל משותף
+            <select value={tankId} onChange={(e) => setTankId(e.target.value)}>
+              <option value="">— בחר מיכל —</option>
+              {tanks.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
         <label className="checkbox-label">
           <input type="checkbox" checked={notMeasuredFlag} onChange={(e) => setNotMeasuredFlag(e.target.checked)} />
           לא נמדד
@@ -201,7 +251,7 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
           </>
         )}
 
-        {well.recoveryMethod === "passive_skimmer" && (
+        {recoveryMethod === "passive_skimmer" && (
           <fieldset>
             <legend>סקימר פאסיבי</legend>
             <label>
@@ -254,7 +304,7 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
           </fieldset>
         )}
 
-        {well.recoveryMethod === "absorbent" && (
+        {recoveryMethod === "absorbent" && (
           <fieldset>
             <legend>סופח</legend>
             <label>
@@ -268,7 +318,7 @@ export function FuelLensVisitForm({ well, existingVisit, onDone }: FuelLensVisit
           </fieldset>
         )}
 
-        {well.recoveryMethod === "active_skimmer" && (
+        {recoveryMethod === "active_skimmer" && (
           <fieldset>
             <legend>מיכל משותף{tank ? ` — ${tank.label}` : ""}</legend>
             <label>

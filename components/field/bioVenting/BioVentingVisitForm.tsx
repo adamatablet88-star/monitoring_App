@@ -32,7 +32,6 @@ export function BioVentingVisitForm({ system, onDone }: BioVentingVisitFormProps
 
   // Excludes today's own (possibly still-being-edited) visit from its own history.
   const pastVisits = visits.filter((v) => v.systemId === system.id && v.id !== existingVisit?.id);
-  const vacuumIntakeLineHistory = computeFieldHistory(pastVisits, (v) => v.visitDate, (v) => Math.abs(v.vacuumIntakeLine));
   const flowOverallHistory = computeFieldHistory(pastVisits, (v) => v.visitDate, (v) => v.flowOverall);
   const pressureOverallHistory = computeFieldHistory(pastVisits, (v) => v.visitDate, (v) => v.pressureOverall);
 
@@ -45,7 +44,6 @@ export function BioVentingVisitForm({ system, onDone }: BioVentingVisitFormProps
     existingVisit?.filterStatus ?? "checked_ok",
   );
 
-  const [vacuumIntakeLine, setVacuumIntakeLine] = useState(existingVisit?.vacuumIntakeLine?.toString() ?? "");
   const [flowOverall, setFlowOverall] = useState(existingVisit?.flowOverall?.toString() ?? "");
   const [pressureOverall, setPressureOverall] = useState(existingVisit?.pressureOverall?.toString() ?? "");
 
@@ -61,6 +59,7 @@ export function BioVentingVisitForm({ system, onDone }: BioVentingVisitFormProps
 
   const [oxygenTestDone, setOxygenTestDone] = useState(existingVisit?.annualOxygenTest?.done ?? false);
   const [oxygenTestDate, setOxygenTestDate] = useState(existingVisit?.annualOxygenTest?.date ?? "");
+  const [oxygenTestNote, setOxygenTestNote] = useState(existingVisit?.annualOxygenTest?.note ?? "");
 
   const [extraReadings, setExtraReadings] = useState<ParameterReading[]>(existingVisit?.extraReadings ?? []);
   const [monitoringPoints, setMonitoringPoints] = useState<MonitoringPointDraft[]>(
@@ -97,14 +96,13 @@ export function BioVentingVisitForm({ system, onDone }: BioVentingVisitFormProps
       updatedAt,
       statusOnArrival,
       filterStatus,
-      vacuumIntakeLine: -Math.abs(Number(vacuumIntakeLine) || 0),
       flowOverall: Number(flowOverall) || 0,
       pressureOverall: Number(pressureOverall) || 0,
       wells: wells
         .filter((w) => wellPercentages[w.id]?.trim())
         .map((w) => ({ treatmentWellId: w.id, openPercent: Number(wellPercentages[w.id]) })),
       dilutionValvePercent: Number(dilutionValvePercent) || 0,
-      annualOxygenTest: oxygenTestDone ? { done: true, date: oxygenTestDate } : undefined,
+      annualOxygenTest: oxygenTestDone ? { done: true, date: oxygenTestDate, note: oxygenTestNote.trim() || undefined } : undefined,
       extraReadings,
       monitoringPoints: monitoringPoints
         .filter((p) => p.pointCode.trim())
@@ -153,11 +151,6 @@ export function BioVentingVisitForm({ system, onDone }: BioVentingVisitFormProps
 
         <div className="field-row">
           <label>
-            וואקום בקו היניקה
-            <input type="number" step="any" value={vacuumIntakeLine} onChange={(e) => setVacuumIntakeLine(e.target.value)} />
-            <FieldHistoryHint stats={vacuumIntakeLineHistory} />
-          </label>
-          <label>
             ספיקה כללית
             <input type="number" step="any" value={flowOverall} onChange={(e) => setFlowOverall(e.target.value)} />
             <FieldHistoryHint stats={flowOverallHistory} />
@@ -205,13 +198,21 @@ export function BioVentingVisitForm({ system, onDone }: BioVentingVisitFormProps
             בוצע
           </label>
           {oxygenTestDone && (
-            <label>
-              תאריך
-              <input type="date" value={oxygenTestDate} onChange={(e) => setOxygenTestDate(e.target.value)} />
-            </label>
+            <>
+              <label>
+                תאריך
+                <input type="date" value={oxygenTestDate} onChange={(e) => setOxygenTestDate(e.target.value)} />
+              </label>
+              <label>
+                הערה
+                <input value={oxygenTestNote} onChange={(e) => setOxygenTestNote(e.target.value)} />
+              </label>
+            </>
           )}
         </fieldset>
 
+        {/* וואקום בקו היניקה ו-O2/CO2 (ברמת המערכת) נטענים כפרמטרים
+            ברירת-מחדל מוגדרים-מראש ומוצגים כאן, לא כשדות קבועים. */}
         <ExtraParametersFields systemId={system.id} readings={extraReadings} onChange={setExtraReadings} pastVisits={pastVisits} />
 
         <MonitoringPointFields points={monitoringPoints} onChange={setMonitoringPoints} />

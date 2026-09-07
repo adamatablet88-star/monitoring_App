@@ -3,10 +3,9 @@
 import { useState } from "react";
 import type { ParameterReading, SveSystemVisit, SveVisitType, SveWellVisit, TreatmentSystem, TreatmentWell } from "@/lib/types";
 import { ConflictError, newId, saveWithConflictCheck, useCollection } from "@/lib/rtdb-collection";
+import { SVE_PARAMETER_KEYS } from "@/lib/defaultParameters";
 import { useAuth } from "@/lib/auth-context";
 import { ExtraParametersFields } from "../ExtraParametersFields";
-import { CriticalBanner } from "../CriticalBanner";
-import { isCriticalTriggered } from "../criticalThreshold";
 import { computeFieldHistory } from "../fieldHistory";
 import { FieldHistoryHint } from "../FieldHistoryHint";
 import { notMeasuredFieldToDraft, draftToNotMeasuredField } from "../notMeasured";
@@ -17,8 +16,6 @@ const VISIT_TYPE_LABELS: Record<SveVisitType, string> = {
   large: "טיפול גדול",
   baseline: "Baseline",
 };
-
-const PID_AFTER_CRITICAL = { criticalDirection: "above" as const, criticalValue: 50, criticalMessage: "יש להתקשר מיידית למפקח" };
 
 function todayString(): string {
   return new Date().toISOString().slice(0, 10);
@@ -32,6 +29,11 @@ function wellDraftFromVisit(wellVisit: SveWellVisit | undefined): SveWellDraft {
     productDepth: notMeasuredFieldToDraft(wellVisit?.productDepth),
     bottomDepth: notMeasuredFieldToDraft(wellVisit?.bottomDepth),
   };
+}
+
+/** PID before/after now live in extraReadings (seeded parameters) — efficiency is still derived from them at save time. */
+function readingValue(readings: ParameterReading[], systemId: string, key: string): number | null {
+  return readings.find((r) => r.parameterId === `${systemId}__${key}`)?.value ?? null;
 }
 
 interface SveVisitFormProps {
@@ -53,10 +55,7 @@ export function SveVisitForm({ system, onDone }: SveVisitFormProps) {
 
   // Excludes today's own (possibly still-being-edited) visit from its own history.
   const pastVisits = visits.filter((v) => v.systemId === system.id && v.id !== existingVisit?.id);
-  const vacuumOverallHistory = computeFieldHistory(pastVisits, (v) => v.visitDate, (v) => Math.abs(v.vacuumOverall));
   const flowOverallHistory = computeFieldHistory(pastVisits, (v) => v.visitDate, (v) => v.flowOverall);
-  const vacuumMoistureSeparatorHistory = computeFieldHistory(pastVisits, (v) => v.visitDate, (v) => Math.abs(v.vacuumMoistureSeparator));
-  const pidAfterHistory = computeFieldHistory(pastVisits, (v) => v.visitDate, (v) => v.pidAfterConverter);
 
   // Frozen at mount — what this form actually loaded, for conflict detection on save.
   const [baseUpdatedAt] = useState<number | null>(existingVisit?.updatedAt ?? null);
@@ -68,7 +67,6 @@ export function SveVisitForm({ system, onDone }: SveVisitFormProps) {
   const [startupSucceeded, setStartupSucceeded] = useState(existingVisit?.startupAttempt?.succeeded ?? false);
   const [startupFaultFlagged, setStartupFaultFlagged] = useState(existingVisit?.startupAttempt?.faultFlagged ?? false);
 
-  const [operatingHours, setOperatingHours] = useState(existingVisit?.operatingHours?.toString() ?? "");
   const [catalystInlet, setCatalystInlet] = useState(existingVisit?.catalystTemp?.inlet?.toString() ?? "");
   const [catalystInternal, setCatalystInternal] = useState(existingVisit?.catalystTemp?.internal?.toString() ?? "");
   const [catalystOutlet, setCatalystOutlet] = useState(existingVisit?.catalystTemp?.outlet?.toString() ?? "");
@@ -81,20 +79,7 @@ export function SveVisitForm({ system, onDone }: SveVisitFormProps) {
     return map;
   });
 
-  const [vacuumOverall, setVacuumOverall] = useState(existingVisit ? String(Math.abs(existingVisit.vacuumOverall)) : "");
   const [flowOverall, setFlowOverall] = useState(existingVisit?.flowOverall?.toString() ?? "");
-  const [vacuumMoistureSeparator, setVacuumMoistureSeparator] = useState(
-    existingVisit ? String(Math.abs(existingVisit.vacuumMoistureSeparator)) : "",
-  );
-
-  const [vcv, setVcv] = useState<1 | 2 | 3 | 4 | 5>(existingVisit?.vcv ?? 3);
-
-  const [hasCatalyticConverter, setHasCatalyticConverter] = useState(!!existingVisit?.catalyticConverterInlet);
-  const [converterPressure, setConverterPressure] = useState(existingVisit?.catalyticConverterInlet?.pressure?.toString() ?? "");
-  const [converterTemp, setConverterTemp] = useState(existingVisit?.catalyticConverterInlet?.temp?.toString() ?? "");
-
-  const [pidBefore, setPidBefore] = useState(existingVisit?.pidBeforeConverter?.toString() ?? "");
-  const [pidAfter, setPidAfter] = useState(existingVisit?.pidAfterConverter?.toString() ?? "");
 
   const [to15Done, setTo15Done] = useState(existingVisit?.to15?.done ?? false);
   const [to15Date, setTo15Date] = useState(existingVisit?.to15?.date ?? "");
@@ -115,13 +100,12 @@ export function SveVisitForm({ system, onDone }: SveVisitFormProps) {
     return wellDrafts[well.id] ?? wellDraftFromVisit(existingVisit?.wellVisits.find((wv) => wv.treatmentWellId === well.id));
   }
 
-  const pidBeforeNum = pidBefore.trim() ? Number(pidBefore) : null;
-  const pidAfterNum = pidAfter.trim() ? Number(pidAfter) : null;
+  const pidBeforeNum = readingValue(extraReadings, system.id, SVE_PARAMETER_KEYS.pidBeforeConverter);
+  const pidAfterNum = readingValue(extraReadings, system.id, SVE_PARAMETER_KEYS.pidAfterConverter);
   const efficiencyPercent =
     pidBeforeNum !== null && pidAfterNum !== null && pidBeforeNum > 0
       ? ((pidBeforeNum - pidAfterNum) / pidBeforeNum) * 100
       : null;
-  const pidCritical = isCriticalTriggered(pidAfterNum, PID_AFTER_CRITICAL);
 
   const showRunningFields = statusOnArrival === "running" || (attemptedStartup && startupSucceeded);
   const showWellForms = visitType === "large" || visitType === "baseline";
@@ -155,7 +139,6 @@ export function SveVisitForm({ system, onDone }: SveVisitFormProps) {
       visitType,
       statusOnArrival,
       startupAttempt: statusOnArrival === "off" && attemptedStartup ? { succeeded: startupSucceeded, faultFlagged: startupFaultFlagged } : undefined,
-      operatingHours: showRunningFields && operatingHours.trim() ? Number(operatingHours) : undefined,
       catalystTemp:
         showRunningFields && catalystInlet.trim() && catalystInternal.trim() && catalystOutlet.trim()
           ? { inlet: Number(catalystInlet), internal: Number(catalystInternal), outlet: Number(catalystOutlet) }
@@ -163,16 +146,7 @@ export function SveVisitForm({ system, onDone }: SveVisitFormProps) {
       manifold: treatmentWells
         .filter((w) => manifold[w.id]?.trim())
         .map((w) => ({ treatmentWellId: w.id, openPercent: Number(manifold[w.id]) })),
-      vacuumOverall: -Math.abs(Number(vacuumOverall) || 0),
       flowOverall: Number(flowOverall) || 0,
-      vacuumMoistureSeparator: -Math.abs(Number(vacuumMoistureSeparator) || 0),
-      vcv,
-      catalyticConverterInlet:
-        hasCatalyticConverter && converterPressure.trim() && converterTemp.trim()
-          ? { pressure: Number(converterPressure), temp: Number(converterTemp) }
-          : undefined,
-      pidBeforeConverter: pidBeforeNum ?? 0,
-      pidAfterConverter: pidAfterNum ?? 0,
       efficiencyPercent: efficiencyPercent ?? 0,
       to15: to15Done ? { done: true, date: to15Date, canisterNumber: to15Canister, sampleTime: to15Time } : undefined,
       extraReadings,
@@ -257,11 +231,7 @@ export function SveVisitForm({ system, onDone }: SveVisitFormProps) {
 
         {showRunningFields && (
           <fieldset>
-            <legend>שעות עבודה וטמפ&apos; קטליסט</legend>
-            <label>
-              שעות עבודה מצטברות
-              <input type="number" step="any" value={operatingHours} onChange={(e) => setOperatingHours(e.target.value)} />
-            </label>
+            <legend>טמפ&apos; קטליסט</legend>
             <div className="field-row">
               <label>
                 טמפ&apos; כניסה
@@ -303,68 +273,13 @@ export function SveVisitForm({ system, onDone }: SveVisitFormProps) {
           </fieldset>
         )}
 
-        <div className="field-row">
-          <label>
-            וואקום כללי
-            <input type="number" step="any" value={vacuumOverall} onChange={(e) => setVacuumOverall(e.target.value)} />
-            <FieldHistoryHint stats={vacuumOverallHistory} />
-          </label>
-          <label>
-            ספיקה כללית
-            <input type="number" step="any" value={flowOverall} onChange={(e) => setFlowOverall(e.target.value)} />
-            <FieldHistoryHint stats={flowOverallHistory} />
-          </label>
-          <label>
-            וואקום מפריד לחות
-            <input type="number" step="any" value={vacuumMoistureSeparator} onChange={(e) => setVacuumMoistureSeparator(e.target.value)} />
-            <FieldHistoryHint stats={vacuumMoistureSeparatorHistory} />
-          </label>
-        </div>
-
         <label>
-          VCV (1=אטמוספרה בלבד, 5=קידוחים בלבד)
-          <select value={vcv} onChange={(e) => setVcv(Number(e.target.value) as 1 | 2 | 3 | 4 | 5)}>
-            {[1, 2, 3, 4, 5].map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
+          ספיקה כללית
+          <input type="number" step="any" value={flowOverall} onChange={(e) => setFlowOverall(e.target.value)} />
+          <FieldHistoryHint stats={flowOverallHistory} />
         </label>
 
-        <fieldset>
-          <legend>ממיר קטליטי</legend>
-          <label className="checkbox-label">
-            <input type="checkbox" checked={hasCatalyticConverter} onChange={(e) => setHasCatalyticConverter(e.target.checked)} />
-            יש ממיר קטליטי במערכת זו
-          </label>
-          {hasCatalyticConverter && (
-            <div className="field-row">
-              <label>
-                לחץ כניסה לממיר
-                <input type="number" step="any" value={converterPressure} onChange={(e) => setConverterPressure(e.target.value)} />
-              </label>
-              <label>
-                טמפ&apos; כניסה לממיר
-                <input type="number" step="any" value={converterTemp} onChange={(e) => setConverterTemp(e.target.value)} />
-              </label>
-            </div>
-          )}
-        </fieldset>
-
-        <div className="field-row">
-          <label>
-            PID לפני ממיר
-            <input type="number" step="any" value={pidBefore} onChange={(e) => setPidBefore(e.target.value)} />
-          </label>
-          <label>
-            PID אחרי ממיר
-            <input type="number" step="any" value={pidAfter} onChange={(e) => setPidAfter(e.target.value)} />
-            <FieldHistoryHint stats={pidAfterHistory} />
-          </label>
-        </div>
         <p className="hint">יעילות מחושבת: {efficiencyPercent !== null ? `${efficiencyPercent.toFixed(1)}%` : "—"}</p>
-        {pidCritical && <CriticalBanner message={PID_AFTER_CRITICAL.criticalMessage} />}
 
         <fieldset>
           <legend>TO-15</legend>
@@ -390,6 +305,9 @@ export function SveVisitForm({ system, onDone }: SveVisitFormProps) {
           )}
         </fieldset>
 
+        {/* וואקום סעפת, וואקום מפריד לחות, VCV, לחץ כניסה לממיר קטליטי,
+            PID לפני/אחרי ממיר, ושעות עבודה נמצאים כאן — פרמטרים שנזרעו
+            כברירת מחדל למערכת SVE, לא שדות קבועים. ראה lib/defaultParameters.ts. */}
         <ExtraParametersFields systemId={system.id} readings={extraReadings} onChange={setExtraReadings} pastVisits={pastVisits} />
 
         {showWellForms && treatmentWells.length > 0 && (

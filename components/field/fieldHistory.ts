@@ -9,6 +9,8 @@ export interface FieldHistoryStats {
   max: number;
   avg: number;
   count: number;
+  /** visitDate of the most recent measurement within the window. */
+  lastDate: string;
 }
 
 export function sixMonthsAgoDate(): string {
@@ -23,16 +25,18 @@ export function computeFieldHistory<V>(
   valueOf: (v: V) => number | null | undefined,
   cutoffDate: string = sixMonthsAgoDate(),
 ): FieldHistoryStats | null {
-  const values = visits
+  const withDates = visits
     .filter((v) => visitDateOf(v) >= cutoffDate)
-    .map(valueOf)
-    .filter((v): v is number => typeof v === "number" && !Number.isNaN(v));
+    .map((v) => ({ date: visitDateOf(v), value: valueOf(v) }))
+    .filter((v): v is { date: string; value: number } => typeof v.value === "number" && !Number.isNaN(v.value));
 
-  if (values.length === 0) return null;
+  if (withDates.length === 0) return null;
+  const values = withDates.map((v) => v.value);
   return {
     min: Math.min(...values),
     max: Math.max(...values),
     avg: values.reduce((a, b) => a + b, 0) / values.length,
     count: values.length,
+    lastDate: withDates.reduce((latest, v) => (v.date > latest ? v.date : latest), withDates[0].date),
   };
 }

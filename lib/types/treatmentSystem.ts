@@ -20,6 +20,24 @@ export interface ParameterConfig {
   required: boolean;
   order: number;
 
+  /** Tooltip/explanation shown to the technician next to the field. */
+  helpText: string;
+  /**
+   * Deactivate instead of delete — a parameter already used in past
+   * measurements must never be removed (spec rule: never delete
+   * historical config, only mark inactive). Admin "delete" always
+   * flips this to false; ExtraParametersFields hides inactive
+   * parameters from the field form but past readings stay intact.
+   */
+  active: boolean;
+  /**
+   * True for vacuum-type readings: the technician always enters a
+   * positive magnitude, and the value is stored negated (spec 6.5).
+   * Generic flag rather than a hardcoded field name, since which
+   * parameters are "vacuum" now varies by what an admin has configured.
+   */
+  invertSign: boolean;
+
   criticalDirection: CriticalDirection;
   criticalValue: number | null;
   criticalMessage: string;

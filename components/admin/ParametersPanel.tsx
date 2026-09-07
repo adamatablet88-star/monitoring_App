@@ -21,6 +21,8 @@ interface ParameterDraft {
   maxValue: string;
   required: boolean;
   order: string;
+  helpText: string;
+  invertSign: boolean;
   criticalDirection: CriticalDirection;
   criticalValue: string;
   criticalMessage: string;
@@ -33,14 +35,18 @@ const emptyDraft: ParameterDraft = {
   maxValue: "",
   required: false,
   order: "0",
+  helpText: "",
+  invertSign: false,
   criticalDirection: "none",
   criticalValue: "",
   criticalMessage: "",
 };
 
 export function ParametersPanel({ systemId }: ParametersPanelProps) {
-  const { items: allParameters, save, remove } = useCollection<ParameterConfig>("parameterConfigs");
+  const { items: allParameters, save } = useCollection<ParameterConfig>("parameterConfigs");
   const parameters = allParameters.filter((p) => p.systemId === systemId).sort((a, b) => a.order - b.order);
+  const activeParameters = parameters.filter((p) => p.active);
+  const inactiveParameters = parameters.filter((p) => !p.active);
 
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState<ParameterDraft>(emptyDraft);
@@ -57,6 +63,9 @@ export function ParametersPanel({ systemId }: ParametersPanelProps) {
       maxValue: draft.maxValue.trim() ? Number(draft.maxValue) : null,
       required: draft.required,
       order: Number(draft.order) || 0,
+      helpText: draft.helpText.trim(),
+      active: true,
+      invertSign: draft.invertSign,
       criticalDirection: draft.criticalDirection,
       criticalValue: draft.criticalDirection !== "none" && draft.criticalValue.trim() ? Number(draft.criticalValue) : null,
       criticalMessage: draft.criticalDirection !== "none" ? draft.criticalMessage.trim() : "",
@@ -65,28 +74,54 @@ export function ParametersPanel({ systemId }: ParametersPanelProps) {
     setShowForm(false);
   }
 
+  // A parameter already used in measurements must never be deleted outright
+  // (spec rule 9) — "delete" always just deactivates it instead. Historical
+  // readings that reference it stay exactly as they were.
+  async function setActive(param: ParameterConfig, active: boolean) {
+    await save({ ...param, active });
+  }
+
+  function renderRow(param: ParameterConfig) {
+    return (
+      <li key={param.id}>
+        <span className="entity-row static">
+          {param.label} [{param.unit}]
+          {param.minValue !== null || param.maxValue !== null
+            ? ` · טווח תקין: ${param.minValue ?? "—"}–${param.maxValue ?? "—"}`
+            : ""}
+          {param.required && " · חובה"}
+          {param.invertSign && " · וואקום (סימן הפוך)"}
+          {param.criticalDirection !== "none" &&
+            ` · סף קריטי: ${CRITICAL_LABELS[param.criticalDirection]} ${param.criticalValue ?? ""}`}
+          {param.helpText && <span className="hint"> — {param.helpText}</span>}
+        </span>
+        {param.active ? (
+          <button type="button" className="danger-link" onClick={() => setActive(param, false)}>
+            השבת
+          </button>
+        ) : (
+          <button type="button" onClick={() => setActive(param, true)}>
+            הפעל מחדש
+          </button>
+        )}
+      </li>
+    );
+  }
+
   return (
     <section className="panel nested">
       <h3>פרמטרים (מנוע קונפיגורציה גמיש)</h3>
       <ul className="entity-list">
-        {parameters.map((param) => (
-          <li key={param.id}>
-            <span className="entity-row static">
-              {param.label} [{param.unit}]
-              {param.minValue !== null || param.maxValue !== null
-                ? ` · טווח תקין: ${param.minValue ?? "—"}–${param.maxValue ?? "—"}`
-                : ""}
-              {param.required && " · חובה"}
-              {param.criticalDirection !== "none" &&
-                ` · סף קריטי: ${CRITICAL_LABELS[param.criticalDirection]} ${param.criticalValue ?? ""}`}
-            </span>
-            <button type="button" className="danger-link" onClick={() => remove(param)}>
-              מחק
-            </button>
-          </li>
-        ))}
-        {parameters.length === 0 && <li className="empty-hint">אין עדיין פרמטרים למערכת זו</li>}
+        {activeParameters.map(renderRow)}
+        {activeParameters.length === 0 && <li className="empty-hint">אין עדיין פרמטרים למערכת זו</li>}
       </ul>
+
+      {inactiveParameters.length > 0 && (
+        <details>
+          <summary>פרמטרים מושבתים ({inactiveParameters.length})</summary>
+          <ul className="entity-list">{inactiveParameters.map(renderRow)}</ul>
+        </details>
+      )}
 
       {showForm ? (
         <form onSubmit={handleSubmit} className="inline-form stacked">
@@ -100,6 +135,10 @@ export function ParametersPanel({ systemId }: ParametersPanelProps) {
               <input value={draft.unit} onChange={(e) => setDraft((d) => ({ ...d, unit: e.target.value }))} required />
             </label>
           </div>
+          <label>
+            הסבר לטכנאי (טולטיפ)
+            <input value={draft.helpText} onChange={(e) => setDraft((d) => ({ ...d, helpText: e.target.value }))} />
+          </label>
           <div className="field-row">
             <label>
               טווח תקין — מינימום
@@ -128,6 +167,14 @@ export function ParametersPanel({ systemId }: ParametersPanelProps) {
                 onChange={(e) => setDraft((d) => ({ ...d, required: e.target.checked }))}
               />
               שדה חובה
+            </label>
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={draft.invertSign}
+                onChange={(e) => setDraft((d) => ({ ...d, invertSign: e.target.checked }))}
+              />
+              שדה וואקום (טכנאי מזין ערך חיובי, נשמר כשלילי)
             </label>
             <label>
               סדר תצוגה

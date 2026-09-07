@@ -25,25 +25,22 @@ export function WellsPanel({ siteId }: WellsPanelProps) {
 
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState<IdentityDraft>(emptyIdentityDraft);
-  const [recoveryMethod, setRecoveryMethod] = useState<RecoveryMethod>("none");
-  const [tankId, setTankId] = useState<string>("");
 
   function startCreate() {
     setDraft(emptyIdentityDraft);
-    setRecoveryMethod("none");
-    setTankId("");
     setShowForm(true);
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!isIdentityDraftValid(draft)) return;
+    // אמצעי הפינוי אינו נבחר כאן — הטכנאי מדווח/מעדכן אותו בכל ביקור
+    // (ראו FuelLensVisitForm), והערך מתחיל ב"ללא אמצעי" עד לביקור הראשון.
     await save({
       id: newId(),
       siteId,
       ...draftToIdentity(draft),
-      recoveryMethod,
-      tankId: recoveryMethod === "active_skimmer" && tankId ? tankId : undefined,
+      recoveryMethod: "none",
     });
     setShowForm(false);
   }
@@ -70,30 +67,7 @@ export function WellsPanel({ siteId }: WellsPanelProps) {
         <form onSubmit={handleSubmit} className="inline-form stacked">
           <IdentityFields draft={draft} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} />
 
-          <label>
-            אמצעי פינוי
-            <select value={recoveryMethod} onChange={(e) => setRecoveryMethod(e.target.value as RecoveryMethod)}>
-              {(Object.keys(RECOVERY_LABELS) as RecoveryMethod[]).map((method) => (
-                <option key={method} value={method}>
-                  {RECOVERY_LABELS[method]}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {recoveryMethod === "active_skimmer" && (
-            <label>
-              מיכל משותף
-              <select value={tankId} onChange={(e) => setTankId(e.target.value)}>
-                <option value="">— בחר מיכל —</option>
-                {tanks.map((tank) => (
-                  <option key={tank.id} value={tank.id}>
-                    {tank.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
+          <p className="hint">אמצעי הפינוי ומיכל האיסוף נקבעים בשטח, בדיווח הטכנאי — לא כאן.</p>
 
           <div>
             <button type="submit">שמור</button>

@@ -1,4 +1,5 @@
 import type { BioVentingSystemVisit } from "@/lib/types";
+import { BIO_VENTING_PARAMETER_KEYS } from "@/lib/defaultParameters";
 import type { TrendSeries } from "./TrendChart";
 import { SERIES_COLORS } from "./TrendChart";
 import { average } from "./timeRange";
@@ -17,7 +18,10 @@ export const BIO_VENTING_METRIC_LABELS: Record<BioVentingMetric, string> = {
  * that visit. A reasonable simplification for a system-level trend line.
  */
 function metricValue(visit: BioVentingSystemVisit, metric: BioVentingMetric): number | null {
-  if (metric === "vacuumIntakeLine") return visit.vacuumIntakeLine;
+  if (metric === "vacuumIntakeLine") {
+    const key = `${visit.systemId}__${BIO_VENTING_PARAMETER_KEYS.vacuumIntakeLine}`;
+    return visit.extraReadings.find((r) => r.parameterId === key)?.value ?? null;
+  }
   const readings = visit.monitoringPoints.flatMap((p) => p.depths.map((d) => d[metric]));
   return average(readings);
 }

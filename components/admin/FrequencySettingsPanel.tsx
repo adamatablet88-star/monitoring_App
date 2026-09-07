@@ -32,7 +32,10 @@ export function FrequencySettingsPanel({ siteId }: FrequencySettingsPanelProps) 
   const contractDefault: FrequencyValue = client?.defaultFrequency ?? "annual";
 
   const rows: ScopeRow[] = [
-    { key: "site", label: "האתר (עדשת דלק)", scope: siteScope(siteId) },
+    { key: "site-fuelLens", label: "האתר (עדשת דלק)", scope: siteScope(siteId, "fuelLens") },
+    ...(site?.protocolTypes.includes("groundwater")
+      ? [{ key: "site-groundwater", label: "האתר (דיגום מי תהום)", scope: siteScope(siteId, "groundwater") }]
+      : []),
     ...systems.map((s) => ({ key: s.id, label: `מערכת: [${s.systemType}] ${s.systemLabel}`, scope: systemScope(s.id) })),
   ];
 

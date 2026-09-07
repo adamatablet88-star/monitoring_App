@@ -1,16 +1,16 @@
-import type { FrequencyScope } from "@/lib/types";
+import type { FrequencyScope, SiteProtocolScope } from "@/lib/types";
 
-/** Stable string key for a {siteId} | {systemId} scope union, for lookups/comparisons. */
+/** Stable string key for a {siteId,protocol} | {systemId} scope union, for lookups/comparisons. */
 export function scopeKey(scope: FrequencyScope): string {
-  return "siteId" in scope ? `site:${scope.siteId}` : `system:${scope.systemId}`;
+  return "systemId" in scope ? `system:${scope.systemId}` : `site:${scope.siteId}:${scope.protocol}`;
 }
 
 export function scopeEquals(a: FrequencyScope, b: FrequencyScope): boolean {
   return scopeKey(a) === scopeKey(b);
 }
 
-export function siteScope(siteId: string): FrequencyScope {
-  return { siteId };
+export function siteScope(siteId: string, protocol: SiteProtocolScope): FrequencyScope {
+  return { siteId, protocol };
 }
 
 export function systemScope(systemId: string): FrequencyScope {

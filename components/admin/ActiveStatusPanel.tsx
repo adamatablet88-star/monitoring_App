@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { ActiveStatus, TreatmentSystem } from "@/lib/types";
+import type { ActiveStatus, Site, TreatmentSystem } from "@/lib/types";
 import { newId, useCollection } from "@/lib/rtdb-collection";
 import { useAuth } from "@/lib/auth-context";
 import { scopeEquals, siteScope, systemScope } from "./scope";
@@ -22,10 +22,15 @@ export function ActiveStatusPanel({ siteId }: ActiveStatusPanelProps) {
   const { appUser } = useAuth();
   const { items: allStatuses, save } = useCollection<ActiveStatus>("activeStatuses");
   const { items: allSystems } = useCollection<TreatmentSystem>("treatmentSystems");
+  const { items: allSites } = useCollection<Site>("sites");
+  const site = allSites.find((s) => s.id === siteId);
   const systems = allSystems.filter((s) => s.siteId === siteId);
 
   const rows: ScopeRow[] = [
-    { key: "site", label: "האתר (עדשת דלק)", scope: siteScope(siteId) },
+    { key: "site-fuelLens", label: "האתר (עדשת דלק)", scope: siteScope(siteId, "fuelLens") },
+    ...(site?.protocolTypes.includes("groundwater")
+      ? [{ key: "site-groundwater", label: "האתר (דיגום מי תהום)", scope: siteScope(siteId, "groundwater") }]
+      : []),
     ...systems.map((s) => ({ key: s.id, label: `מערכת: [${s.systemType}] ${s.systemLabel}`, scope: systemScope(s.id) })),
   ];
 

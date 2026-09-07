@@ -1,7 +1,14 @@
 import type { FrequencyValue } from "./frequency";
 
 /** Ported from field-monitoring-app/packages/shared/src/admin.ts. */
-export type FrequencyScope = { siteId: string } | { systemId: string };
+/**
+ * A site can run fuel-lens and groundwater-sampling protocols in parallel
+ * with no treatment system involved (a "combined" site per Site.protocolTypes)
+ * — each needs its own frequency/status row, not one shared `{siteId}` row,
+ * or a groundwater-only site would have nowhere to configure either (spec 18.7).
+ */
+export type SiteProtocolScope = "fuelLens" | "groundwater";
+export type FrequencyScope = { siteId: string; protocol: SiteProtocolScope } | { systemId: string };
 
 export interface FrequencyChangeRecord {
   changedBy: string;

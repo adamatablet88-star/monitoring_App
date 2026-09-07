@@ -6,6 +6,8 @@ import type {
   FrequencySetting,
   FrequencyValue,
   FuelLensVisit,
+  GroundwaterVisit,
+  GroundwaterWell,
   Site,
   SveSystemVisit,
   TreatmentSystem,
@@ -36,10 +38,12 @@ interface Row {
 export function DueThisMonthView() {
   const { items: sites } = useCollection<Site>("sites");
   const { items: wells } = useCollection<Well>("wells");
+  const { items: groundwaterWells } = useCollection<GroundwaterWell>("groundwaterWells");
   const { items: treatmentSystems } = useCollection<TreatmentSystem>("treatmentSystems");
   const { items: fuelLensVisits } = useCollection<FuelLensVisit>("fuelLensVisits");
   const { items: sveVisits } = useCollection<SveSystemVisit>("sveSystemVisits");
   const { items: bioVentingVisits } = useCollection<BioVentingSystemVisit>("bioVentingSystemVisits");
+  const { items: groundwaterVisits } = useCollection<GroundwaterVisit>("groundwaterVisits");
   const { items: frequencySettings } = useCollection<FrequencySetting>("frequencySettings");
   const { items: activeStatuses } = useCollection<ActiveStatus>("activeStatuses");
 
@@ -52,12 +56,20 @@ export function DueThisMonthView() {
     return { key: JSON.stringify(scope), label, frequency, lastVisitDate, active, status };
   }
 
-  const siteRows: Row[] = sites
+  const fuelLensSiteRows: Row[] = sites
     .filter((site) => site.protocolTypes.includes("fuelLens"))
     .map((site) => {
       const siteWellIds = new Set(wells.filter((w) => w.siteId === site.id).map((w) => w.id));
       const dates = fuelLensVisits.filter((v) => siteWellIds.has(v.wellId)).map((v) => v.visitDate);
-      return rowFor(siteScope(site.id), `${site.name} — עדשת דלק`, latestVisitDate(dates));
+      return rowFor(siteScope(site.id, "fuelLens"), `${site.name} — עדשת דלק`, latestVisitDate(dates));
+    });
+
+  const groundwaterSiteRows: Row[] = sites
+    .filter((site) => site.protocolTypes.includes("groundwater"))
+    .map((site) => {
+      const siteWellIds = new Set(groundwaterWells.filter((w) => w.siteId === site.id).map((w) => w.id));
+      const dates = groundwaterVisits.filter((v) => siteWellIds.has(v.wellId)).map((v) => v.visitDate);
+      return rowFor(siteScope(site.id, "groundwater"), `${site.name} — דיגום מי תהום`, latestVisitDate(dates));
     });
 
   const systemRows: Row[] = treatmentSystems.map((system) => {
@@ -73,7 +85,7 @@ export function DueThisMonthView() {
     );
   });
 
-  const allRows = [...siteRows, ...systemRows].sort((a, b) => {
+  const allRows = [...fuelLensSiteRows, ...groundwaterSiteRows, ...systemRows].sort((a, b) => {
     const order: Record<DueStatus, number> = { overdue: 0, near: 1, never: 2, ok: 3 };
     return order[a.status] - order[b.status];
   });
@@ -84,7 +96,9 @@ export function DueThisMonthView() {
       <p className="hint">
         תצוגה בלבד — האפליקציה אינה בונה סידור עבודה אוטומטי, רק מציגה מה &quot;מבשיל&quot; לפי התדירות שהוגדרה לכל אתר/מערכת.
       </p>
-      {allRows.length === 0 && <p className="empty-hint">אין עדיין אתרים עם פרוטוקול עדשת דלק או מערכות טיפול.</p>}
+      {allRows.length === 0 && (
+        <p className="empty-hint">אין עדיין אתרים עם פרוטוקול עדשת דלק/דיגום מי תהום או מערכות טיפול.</p>
+      )}
       {allRows.length > 0 && (
         <table className="due-table">
           <thead>

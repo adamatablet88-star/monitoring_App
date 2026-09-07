@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { ProtocolType, Site } from "@/lib/types";
+import type { ProtocolType, Site, SiteStatus } from "@/lib/types";
 import { newId, useCollection } from "@/lib/rtdb-collection";
 
 const PROTOCOL_LABELS: Record<ProtocolType, string> = {
@@ -9,6 +9,11 @@ const PROTOCOL_LABELS: Record<ProtocolType, string> = {
   SVE: "SVE",
   bioVenting: "Bio-venting",
   groundwater: "דיגום מי תהום",
+};
+
+const STATUS_LABELS: Record<SiteStatus, string> = {
+  active: "פעיל",
+  inactive: "לא פעיל",
 };
 
 interface SitesPanelProps {
@@ -23,7 +28,11 @@ export function SitesPanel({ clientId, selectedSiteId, onSelect }: SitesPanelPro
 
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
-  const [location, setLocation] = useState("");
+  const [address, setAddress] = useState("");
+  const [lat, setLat] = useState("");
+  const [lng, setLng] = useState("");
+  const [status, setStatus] = useState<SiteStatus>("active");
+  const [notes, setNotes] = useState("");
   const [protocolTypes, setProtocolTypes] = useState<ProtocolType[]>([]);
 
   function toggleProtocol(type: ProtocolType) {
@@ -33,9 +42,25 @@ export function SitesPanel({ clientId, selectedSiteId, onSelect }: SitesPanelPro
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || protocolTypes.length === 0) return;
-    await save({ id: newId(), clientId, name: name.trim(), location: location.trim(), protocolTypes });
+    const now = Date.now();
+    await save({
+      id: newId(),
+      clientId,
+      name: name.trim(),
+      address: address.trim(),
+      coordinates: { lat: Number(lat) || 0, lng: Number(lng) || 0 },
+      status,
+      notes: notes.trim() || undefined,
+      protocolTypes,
+      createdAt: now,
+      updatedAt: now,
+    });
     setName("");
-    setLocation("");
+    setAddress("");
+    setLat("");
+    setLng("");
+    setStatus("active");
+    setNotes("");
     setProtocolTypes([]);
     setShowForm(false);
   }
@@ -52,6 +77,7 @@ export function SitesPanel({ clientId, selectedSiteId, onSelect }: SitesPanelPro
               onClick={() => onSelect(site.id)}
             >
               {site.name}{" "}
+              {site.status === "inactive" && <span className="status-badge pending">לא פעיל</span>}{" "}
               <span className="tag-list">{site.protocolTypes.map((t) => PROTOCOL_LABELS[t]).join(" · ")}</span>
             </button>
             <button type="button" className="danger-link" onClick={() => remove(site)}>
@@ -69,8 +95,32 @@ export function SitesPanel({ clientId, selectedSiteId, onSelect }: SitesPanelPro
             <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
           </label>
           <label>
-            מיקום
-            <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="קואורדינטות / תיאור" />
+            כתובת
+            <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="כתובת מלאה — משמשת לניווט (Waze)" />
+          </label>
+          <div className="field-row">
+            <label>
+              קו רוחב (Lat)
+              <input type="number" step="any" value={lat} onChange={(e) => setLat(e.target.value)} />
+            </label>
+            <label>
+              קו אורך (Lng)
+              <input type="number" step="any" value={lng} onChange={(e) => setLng(e.target.value)} />
+            </label>
+          </div>
+          <label>
+            סטטוס אתר
+            <select value={status} onChange={(e) => setStatus(e.target.value as SiteStatus)}>
+              {(Object.keys(STATUS_LABELS) as SiteStatus[]).map((s) => (
+                <option key={s} value={s}>
+                  {STATUS_LABELS[s]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            הערות
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
           </label>
           <fieldset>
             <legend>סוגי פרוטוקול באתר (ניתן לבחור כמה — אתר &quot;משולב&quot;)</legend>

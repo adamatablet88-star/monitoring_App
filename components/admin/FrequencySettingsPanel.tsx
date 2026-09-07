@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { FrequencySetting, FrequencyValue, TreatmentSystem } from "@/lib/types";
+import type { Client, FrequencySetting, FrequencyValue, Site, TreatmentSystem } from "@/lib/types";
 import { FREQUENCY_LABELS } from "@/lib/types";
 import { newId, useCollection } from "@/lib/rtdb-collection";
 import { useAuth } from "@/lib/auth-context";
@@ -21,7 +21,15 @@ export function FrequencySettingsPanel({ siteId }: FrequencySettingsPanelProps) 
   const { appUser } = useAuth();
   const { items: allSettings, save } = useCollection<FrequencySetting>("frequencySettings");
   const { items: allSystems } = useCollection<TreatmentSystem>("treatmentSystems");
+  const { items: allSites } = useCollection<Site>("sites");
+  const { items: allClients } = useCollection<Client>("clients");
   const systems = allSystems.filter((s) => s.siteId === siteId);
+
+  // תדירות ברירת מחדל לפי חוזה (Client.defaultFrequency), לא ערך קבוע —
+  // משמשת רק כשאין עדיין FrequencySetting מפורש לתחום הזה.
+  const site = allSites.find((s) => s.id === siteId);
+  const client = site ? allClients.find((c) => c.id === site.clientId) : undefined;
+  const contractDefault: FrequencyValue = client?.defaultFrequency ?? "annual";
 
   const rows: ScopeRow[] = [
     { key: "site", label: "האתר (עדשת דלק)", scope: siteScope(siteId) },
@@ -29,12 +37,12 @@ export function FrequencySettingsPanel({ siteId }: FrequencySettingsPanelProps) 
   ];
 
   const [editingKey, setEditingKey] = useState<string | null>(null);
-  const [newValue, setNewValue] = useState<FrequencyValue>("annual");
+  const [newValue, setNewValue] = useState<FrequencyValue>(contractDefault);
   const [reason, setReason] = useState("");
 
   function startEdit(key: string, current: FrequencyValue | null) {
     setEditingKey(key);
-    setNewValue(current ?? "annual");
+    setNewValue(current ?? contractDefault);
     setReason("");
   }
 
@@ -71,7 +79,9 @@ export function FrequencySettingsPanel({ siteId }: FrequencySettingsPanelProps) 
             <li key={row.key} className="stacked-item">
               <div className="entity-row static">
                 <strong>{row.label}</strong> —{" "}
-                {existing ? FREQUENCY_LABELS[existing.currentFrequency] : "לא הוגדר (ברירת מחדל: שנתי)"}
+                {existing
+                  ? FREQUENCY_LABELS[existing.currentFrequency]
+                  : `לא הוגדר (ברירת מחדל לפי חוזה: ${FREQUENCY_LABELS[contractDefault]})`}
               </div>
 
               {existing && existing.history.length > 0 && (
